@@ -19,7 +19,7 @@ export default {
   },
   created() {
     console.error('APP created');
-     document.documentElement.style.setProperty('--view-height', `${window.innerHeight}px`);
+    document.documentElement.style.setProperty('--view-height', `${window.innerHeight}px`);
 
     window.addEventListener('resize', () => {
       document.documentElement.style.setProperty('--view-height', `${window.innerHeight}px`);
@@ -53,7 +53,7 @@ export default {
   --button-color: rgb(58, 66, 109);
   --button-on-color: #0a0;
   --text-color: #eee;
-  --main-font: 'Catamaran';
+  --main-font: 'Roboto';
   --cell-width: calc(var(--board-size) / var(--cells-wide));
   --cell-height: calc(var(--board-size) / var(--cells-wide));
   --cell-letter-size: 1.2rem;

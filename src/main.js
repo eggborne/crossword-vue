@@ -4,7 +4,7 @@ import router from './router';
 import store from './store';
 import './registerServiceWorker';
 
-window.addEventListener('load', () => { 
+window.addEventListener('load', () => {
   console.error('LOADED.');
 });
 

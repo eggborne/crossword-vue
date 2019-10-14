@@ -1,18 +1,43 @@
 <template>
-	<div class="board"></div>
+	<div class="board">
+		<Cell
+			v-for='(cellData, i) in cellGrid.flat()'
+			v-bind:key='i'
+			:id='`cell-${i}`'
+			:index='i'
+			:letter='cellData.letter'
+			:number='cellData.number'
+			:shaded='cellData.shaded'
+			:selected='cellData.selected'
+			:row='cellData.row'
+			:column='cellData.column'
+			:handleClick='handleCellClick'
+		/>
+	</div>
 </template>
 
 <script>
-import Cell from '../components/Cell.vue';
+import Cell from "./Cell.vue";
 
 export default {
   name: 'Board',
-  components: {}
+  props: {
+    size: Object,
+		cellGrid: Array,
+		handleCellClick: Function
+  },
+  components: {
+    Cell
+  },
+  methods: {
+    
+  }
 };
 </script>
 
 <style scoped>
 .board {
+	color: var(--blank-color);
 	width: var(--board-size);
   min-height: var(--board-size);
 	max-height: calc(

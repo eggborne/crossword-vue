@@ -1,14 +1,21 @@
 <template>
 	<div class="control-panel">
-
+		<Button 
+			:label='`Add labels`'
+			:handleClick='addCellLabels'
+		/>
 	</div>
 </template>
 
 <script>
+import Button from './Button';
 export default {
-  name: 'ControlPanel',
+	name: 'ControlPanel',
+	props: {
+		addCellLabels: Function
+	},
   components: {
-
+		Button
   }
 };
 </script>

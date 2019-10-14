@@ -1,28 +1,61 @@
 <template>
-	<div class="cell"></div>
+	<div 
+    :class='[`cell`, selected && `selected`, shaded && `shaded`]'
+    v-on:pointerdown='handleClick'
+  >
+    <div class='number'>{{ number }}</div>
+    <div class='letter'>{{ letter }}</div>
+  </div>
 </template>
 
 <script>
 export default {
   name: 'Cell',
-  components: {}
+  components: {},
+  props: {
+    shaded: Boolean,
+    selected: Boolean,
+    letter: '',
+    number: '',
+    row: Number,
+    column: Number,
+    handleClick: Function
+  }
 };
 </script>
 
 <style scoped>
 .cell {
-	width: var(--board-size);
-  min-height: var(--board-size);
-	max-height: calc(
-		var(--board-size) * (var(--cells-high) / var(--cells-width) / 3)
-	);
-	display: grid;
-	grid-template-rows: repeat(var(--cells-wide), 1fr);
-	grid-template-columns: repeat(var(--cells-high), 1fr);
-	box-shadow: 1px 1px calc(var(--main-padding) / 2) #00000066,
-		-1px -1px calc(var(--main-padding) / 2) #00000066;
-	outline: calc(var(--board-size) / var(--cells-wide) / 12) solid
-		var(--blank-color);
+	position: relative;
+  outline: calc(var(--cell-width) / 24) solid var(--blank-color);  
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 700;
+  width: var(--cell-width);
+  height: var(--cell-height);
+  max-height: var(--cell-height);
+  padding: 0;
+  /* transition: background 210ms ease; */
+}
+.cell.selected {
+  background: #00ff0099 !important;
+}
+.cell.shaded {
+  background: var(--blank-color) !important;
+}
+.cell > .number {
+  position: absolute;
+  top: 0; 
+  left: calc(var(--cell-width) / 32);
+  font-size: var(--cell-number-size);
+  pointer-events: none;
+}
+.cell > .letter {
+  padding: 0;
+  font-size: calc(var(--cell-letter-size));  
+  text-align: center;
+  pointer-events: none;
 }
 @media (orientation: landscape) {
 	@media (orientation: landscape) {
