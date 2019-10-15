@@ -15,7 +15,7 @@ export default {
   props: {
     shaded: Boolean,
     selected: Boolean,
-    letter: '',
+    letter: '', 
     number: '',
     row: Number,
     column: Number,

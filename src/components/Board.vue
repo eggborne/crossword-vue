@@ -22,27 +22,22 @@ import Cell from "./Cell.vue";
 export default {
   name: 'Board',
   props: {
-    size: Object,
 		cellGrid: Array,
 		handleCellClick: Function
   },
   components: {
     Cell
-  },
-  methods: {
-    
   }
 };
 </script>
 
 <style scoped>
 .board {
+	background: var(--cell-color);
 	color: var(--blank-color);
 	width: var(--board-size);
   min-height: var(--board-size);
-	max-height: calc(
-		var(--board-size) * (var(--cells-high) / var(--cells-width) / 3)
-	);
+	max-height: var(--board-size);
 	display: grid;
 	grid-template-rows: repeat(var(--cells-wide), 1fr);
 	grid-template-columns: repeat(var(--cells-high), 1fr);

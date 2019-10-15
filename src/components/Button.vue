@@ -21,12 +21,13 @@ button {
   color: var(--text-color);
   padding: unset;
   border-radius: calc(var(--main-padding) / 4);
-  font-size: calc(var(--main-padding) * 1.1);
+  font-size: var(--main-padding);
+  font-weight: 700;
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
 	align-items: center;
-	text-shadow: -2px -1px 0 #00000088, 2px -1px 0 #00000088, -2px 1px 0 #00000088,
+	text-shadow: -1px -1px 0 #00000088, 1px -1px 0 #00000088, -1px 1px 0 #00000088,
 		2px 1px 0 #00000088;
 }
 button:active {
