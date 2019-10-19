@@ -1,36 +1,46 @@
 <template>
 	<div class="save-modal">
-    <input 
+    Creator: <input 
     id='name-input' 
     type='text' 
     placeholder='Leroy'
     v-model='nameValue'
     v-on:input='handleNameChange'
     />
+    <div class='status-area'>
+      <slot></slot>
+    </div>
     <div id='save-button-area'>
       <Button 
-        :label="`SAVE`" :handleClick="() => handleSaveDiagram(nameValue)" 
+        id='cancel-button'
+        :label="`Cancel`" :handleClick="handleClickCancelSave" 
       />
-      <Button 
-        :label="`NO`" :handleClick="handleClickCancelSave" 
+      <Button
+        id='save-button'
+        :label="`Save`" :handleClick="() => handleSaveDiagram(nameValue)" 
       />
     </div>
 	</div>
+  <!-- <Spinner :direction='-1' />
+  <div class='load-message'>loading...</div> -->
 </template>
 
 <script>
 import Button from './Button';
+import Spinner from './Spinner';
 export default {
   name: 'SaveModal',
   data: () => ({
-    nameValue: ''
+    nameValue: '',  
   }),  
   props: {
     handleSaveDiagram: Function,
-    handleClickCancelSave: Function,    
+    handleClickCancelSave: Function,
+    busy: Boolean
   },
   components: {
-    Button
+    Button,
+    Spinner
   },
   methods: {
     handleNameChange(e, newValue) {
@@ -44,54 +54,58 @@ export default {
 .save-modal {
   position: fixed;
   top: var(--main-padding);
-  /* top: 50%; */
   left: 50%;;
 	background: var(--body-bg-color);
 	color: var(--blank-color);
 	width: 95%;
-  min-height: 100vw;
-  padding: calc(var(--main-padding) * 2);
-  
-  /* transform: translate(-50%, -50%); */
+  padding: calc(var(--main-padding) * 1.5);
   transform: translate(-50%, 0);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: space-between;
-
+  /* justify-content: space-between; */
 	box-shadow: 1px 1px calc(var(--main-padding) / 2) #00000066,
 		-1px -1px calc(var(--main-padding) / 2) #00000066;
-	outline: calc(var(--board-size) / var(--cells-wide) / 12) solid
-    var(--blank-color);
-    z-index: 1;
+  z-index: 1;
+  text-align: center;
+}
+.status-area {
+  height: var(--header-height);
+  font-size: 1rem;
+  color: red;
 }
 #save-button-area {
   display: flex;
-  justify-content: flex-end;
-  align-items: flex-end;  
+  justify-content: center;
+  align-items: flex-end;
+  height: calc(var(--header-height) * 1.25);
+  justify-self: flex-end;
+  flex-grow: 1;
 }
 button {
-  font-size: 2rem;
-	flex-grow: 1;
-  height: calc(var(--header-height) * 1.5);
-  padding: var(--header-height)
+  height: 100%;
+  
 }
-button:last-of-type {
-  font-size: 0.8rem;
-	flex-grow: 0.5;
-  height: calc(var(--header-height) * 1.25);
-  padding: calc(var(--header-height) / 2);
+#save-button {
+  font-size: 1.5rem;
+  padding: 0 var(--header-height);
   margin-left: var(--main-padding);
+}
+#cancel-button {
+  font-size: 0.8rem;  
+  padding: 0 calc(var(--header-height) / 2);
+  background: rgb(123, 124, 95)
 }
 input {
   padding: 0.5rem;
+  margin: var(--main-padding);
   text-align: center;
   background: var(--cell-color);
   color: var(--blank-color);
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-family: inherit;
   font-weight: bold;
-  height: var(--header-height);
+  height: 2.25rem;
   box-shadow: 1px 1px 2px #00000066,
 		-1px -1px 2px #00000066;
 }

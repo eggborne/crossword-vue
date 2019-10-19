@@ -1,4 +1,9 @@
 <template>
+  <div 
+    :style='addedToTraining ? { 
+      outline: `calc(var(--main-padding) / 4) solid ${mlLabel === 1 ? `#a44` : mlLabel === 0.5 ? `rgb(255, 200, 0)` : `rgb(114, 170, 82)`}` 
+    } : ``'
+  >
 	<div :class="[selected ? `mini-board selected` : `mini-board`]"
     :style='{
       gridTemplateRows: `repeat(${height}, 1fr)`,
@@ -11,6 +16,10 @@
 			:class='cellData.shaded ? `shaded` : ``'
 		></div>
 	</div>
+  <div class='added-message'>
+    {{ swastikaPercent }}%
+  </div>
+  </div>
 </template>
 
 <script>
@@ -22,6 +31,9 @@ export default {
     height: Number,
     cellGrid: Array,
     selected: Boolean,
+    addedToTraining: Boolean,
+    mlLabel: Number,
+    swastikaPercent: Number,
     onClickDiagram: Function
   }
 };
@@ -29,18 +41,29 @@ export default {
 
 <style scoped>
 .mini-board {
+  position: relative;
 	background: var(--cell-color);
 	color: var(--blank-color);	
-  width: calc((var(--board-size) - (var(--main-padding) * 3)) / 3);
-  height: calc((var(--board-size) - (var(--main-padding) * 3)) / 3);
+  width: 100%;
+  height: 100%;
   display: grid;
-  /* outline: calc(var(--board-size) / var(--cells-wide) / 12) solid var(--blank-color); */
 }
 .mini-board.selected {
-  outline: calc(var(--main-padding) / 2) solid green;
+  background-color: rgba(93, 255, 93, 0.605);
+}
+.added-message {
+  font-size: 0.75rem;
+  font-weight: 700;
+  width: 100%;
+  text-align: center;
+  transform: translateY(20%);
+  /* display: none; */
+}
+.added .added-message {
+  display: block;
 }
 .mini-board > div {
-  outline: 1px solid var(--blank-color);
+  border: 1px solid var(--blank-color);
 }
 .mini-board > div.shaded {
   background: var(--blank-color);

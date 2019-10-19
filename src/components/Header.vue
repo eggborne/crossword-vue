@@ -1,9 +1,12 @@
 <template>
 	<header>
-		<h1>Crossword Creator</h1>
+		<h1>Crosswords<span style='color: #ccc' >.cc</span></h1>
 		<div class="button-area">
+			<!-- <Button :label="`TRAIN`" :handleClick="handleClickTrain" /> -->
 			<Button id='save-button' :label="`SAVE`" :handleClick="handleClickToSave" />
+			<Button :label="`<`" :handleClick="handleClickPrevious" />
 			<Button :label="`BROWSE`" :handleClick="handleClickToBrowse" />
+			<Button :label="`>`" :handleClick="handleClickNext" />
 		</div>
 	</header>
 </template>
@@ -17,7 +20,11 @@ export default {
 	},
 	props: {
 		handleClickToBrowse: Function,
-		handleClickToSave: Function
+		handleClickToSave: Function,
+		handleClickPrevious: Function,
+		handleClickNext: Function,
+		handleClickTrain: Function,
+		scanBoardForImage: Function
 	}
 };
 </script>
@@ -31,13 +38,14 @@ header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 0 calc(var(--main-padding) * 1.5);
+	padding: 0 calc(var(--main-padding) * 1);
 	padding-right: 0;
 	text-shadow: -2px -1px 0 #00000088, 2px -1px 0 #00000088, -2px 1px 0 #00000088,
 		2px 1px 0 #00000088;
 }
 h1 {
 	font-family: 'Catamaran';
+	color: #eef;
 }
 .button-area {
 	display: flex;
@@ -49,9 +57,7 @@ h1 {
 }
 .button-area button {
 	flex-grow: 0.45;
-	background: rgb(61, 79, 105);
-	color: white;
-	padding: var(--main-padding);
+	padding: calc(var(--main-padding));
 }
 #save-button {
 	margin-right: calc(var(--main-padding) / 4);

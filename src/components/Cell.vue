@@ -22,6 +22,8 @@ export default {
     handleClick: Function
   }
 };
+
+
 </script>
 
 <style scoped>
@@ -37,9 +39,11 @@ export default {
   max-height: var(--cell-height);
   padding: 0;
   /* transition: background 210ms ease; */
+  z-index: 1;
 }
 .cell.selected {
-  background: #00ff0099 !important;
+  /* background: #00ff0099 !important; */
+  outline: calc(var(--cell-width) / 6) solid green;
 }
 .cell.shaded {
   background: var(--blank-color) !important;

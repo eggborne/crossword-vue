@@ -12,7 +12,7 @@
 
 export default {
   name: 'App',
-  created() {
+  created() {    
     console.error('APP created');
     document.documentElement.style.setProperty('--view-height', `${window.innerHeight}px`);
     window.addEventListener('resize', () => {
@@ -31,8 +31,8 @@ export default {
 
 <style>
 :root {
-  --cells-wide: 13;
-  --cells-high: 13;
+  --cells-wide: 15;
+  --cells-high: 15;
   --header-height: 2.5rem;
   --footer-height: 1.5rem;
   --main-padding: 0.75rem;
@@ -42,13 +42,15 @@ export default {
   --blank-color: #111;
   --cell-color: white;
   --button-color: rgb(58, 66, 109);
-  --button-on-color: #0a0;
+  --button-on-color: blue;
   --text-color: #eee;
   --main-font: 'Roboto';
   --cell-width: calc(var(--board-size) / var(--cells-wide));
   --cell-height: calc(var(--board-size) / var(--cells-wide));
   --cell-letter-size: calc(var(--cell-width) / 2.5);
   --cell-number-size: calc(var(--cell-width) / 3.5);
+  --control-row-height: calc(var(--header-height) * 1.25);
+  --control-panel-min-height: calc((var(--control-row-height) * 3.75) + (var(--main-padding) * 3));
 }
 html {
   font-size: calc(1rem);
@@ -59,7 +61,7 @@ html {
   box-sizing: border-box;
 }
 body {
-  position: fixed;
+  /* position: fixed; */
   max-width: 100vw;
   margin: 0;
   -webkit-font-smoothing: antialiased;
@@ -73,7 +75,7 @@ a:link, a:visited {
   color: var(--text-color);
 }
 h1 {
-	font-size: 1.15rem;
+	font-size: calc(var(--header-height) / 2.5);
 	padding: 0;
 	margin: 0;
 }

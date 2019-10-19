@@ -3,17 +3,29 @@
     <Header 
       :handleClickToBrowse='handleClickToBrowse'
       :handleClickToSave='handleClickToSave'
+      :handleClickPrevious='handleClickPrevious'
+      :handleClickNext='handleClickNext'
+      :handleClickTrain='handleClickTrain'
     />
     <div class='board-area'>
       <Board 
         :cellGrid='cellGrid'
-        :handleCellClick='handleCellClick'
+        :handleCellClick='
+        editMode === `diagram` ? handleCellFlip : 
+        editMode === `puzzle` ? handleCellSelect : null
+        '
+        :selectedCellIndex='selectedCellIndex'
       />
     </div>
     <ControlPanel
+      :editMode='editMode'
       :options='options'
       :boardSize='boardSize'
       :symmetry='symmetry'
+      :percentBlack='getPercentBlack(cellGrid)'
+      :wordsNeeded='wordsNeeded'
+      :contiguous='contiguous'
+      :changeEditMode='changeEditMode'
       :addCellLabels='addCellLabels'
       :adjustOption='adjustOption'
       :adjustRangedOption='adjustRangedOption'
@@ -21,20 +33,30 @@
       :shadeBoard='shadeBoard'
       :handleClickToSave='handleClickToSave'
       :handleClickToBrowse='handleClickToBrowse'
-      :handleClickChooseDiagram='handleClickChooseDiagram'      
+      :handleClickChooseDiagram='changeDiagram'
+      :swastikaQuotient='swastikaQuotient'
     />    
     <div v-if='showingModal' id='dark-mask'></div>
     <SaveModal
       v-if='showingModal === `save`'      
       :handleSaveDiagram='handleSaveDiagram'
-      :handleClickCancelSave='handleClickCancelSave'
-    />
+      :handleClickCancelSave='handleClickCancelModal'
+    >
+    {{ saveMessage }}
+    </SaveModal>
     <BrowseModal
       v-if='showingModal === `browse`'
-      :diagrams='diagrams'
-      :handleClickChooseDiagram='handleClickChooseDiagram'
-      :handleClickCancelBrowse='handleClickCancelBrowse'
+      :diagrams='this.auditMode ? auditList : diagrams'
+      :savedTrainingData='savedTrainingData'
+      :handleClickChooseDiagram='changeDiagram'
+      :handleClickCancelBrowse='handleClickCancelModal'
+      :handleClickDeleteDiagram='handleClickDeleteDiagram'
+      :handleClickToLabel='handleClickToLabel'
     />
+    <div id='model-display'></div>
+    <div id='model-display'></div>
+    <!-- <canvas id='board-canvas'/>
+    <img id='board-image' src='img/graychicken.png'/> -->
   </div>
 </template>
 
@@ -45,21 +67,43 @@ import ControlPanel from '../components/ControlPanel.vue';
 import BrowseModal from '../components/BrowseModal.vue';
 import SaveModal from '../components/SaveModal.vue';
 import axios from 'axios';
+import GridScanner from '../gridscanner';
+import DiagramCreator from '../diagramcreator';
+require('../gridscanner.js');
+
+console.log('got', GridScanner)
+
+let gridScanner = new GridScanner;
+let diagramCreator = new DiagramCreator;
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1) + min);
+}
 
 export default {
   name: 'home',
   data: () => ({
+    doneLoading: false,
+    editMode: 'diagram',
+    selectedCellIndex: undefined,
     showingModal: undefined,
     wordList: [],
-    diagrams: ['cock', 'balls'],
-    boardSize: { width: 13, height: 13 },
+    diagrams: undefined,
+    boardSize: { width: 15, height: 15 },
     symmetry: 2,
+    contiguous: true,
+    currentDiagram: undefined,
+    currentPuzzle: undefined,
     cellGrid: [],
+    wordsNeeded: {
+      across: [],
+      down: []
+    },
     options: {
       diagramSize: {
         name: 'diagramSize',
         title: 'Size',
-        minValue: 11,
+        minValue: 13,
         maxValue: 23,
         step: 2,
         cssVar: '--cells-wide',
@@ -74,11 +118,31 @@ export default {
         cssVar: '',
         cssUnit: ''
       }
-    }
+    },
+    busySaving: false,
+    savesPending: false,
+    swastikaQuotient: 0,
+    savedTrainingData: {
+      input: [],
+      output: [],
+      diagramIds: []
+    },
+    ioArray: [],
+    saveMessage: '',
+    auditList: [],
+    auditMode: false
   }),
   mounted() {
     this.createGrid(this.boardSize);
-    this.addCellLabels();
+    this.addCellLabels();    
+    this.getMLData().then(() => {
+      this.doneLoading = true;
+      // let testGrid = diagramCreator.analyzeImage('board-image').join('');
+      // console.warn('made grid', testGrid)
+      // testGrid = this.buildArrayFromGridString(testGrid, 15, 15);
+      // console.warn('made grid', testGrid);
+      // this.cellGrid = testGrid;
+    });
   },
   components: {
     Header,
@@ -88,37 +152,176 @@ export default {
     SaveModal
   },
   methods: {
+    getMLData() {      
+      return new Promise(async (resolve) => {        
+        const modelJSONResponse = await this.getAIModel('swastika')
+        if (modelJSONResponse.data) {
+          console.log('getAIModel got', modelJSONResponse)
+          gridScanner.refreshModel(JSON.parse(modelJSONResponse.data))
+          resolve();          
+        }
+        const startTime = window.performance.now();
+        const trainingDataResponse = await this.getAITrainingData('swastika');
+        if (trainingDataResponse.data) {
+          console.log('getAITrainingData got', trainingDataResponse)
+          this.savedTrainingData = JSON.parse(trainingDataResponse.data);
+          console.error("got training data in", window.performance.now() - startTime);
+        }
+
+      });
+    },
+    getFlippedCellGrid(grid) {
+		  const newGrid = [];
+      grid.forEach((row, r) => { 
+        newGrid[r] = [...row].reverse();
+      });
+      return newGrid;
+    },
+    getPercentBlack: function(cellGrid) {
+      let flatCells = cellGrid.flat();
+      let percent = Math.round((flatCells.filter(cell => cell.shaded).length / flatCells.length) * 100);
+      return percent;
+    },
+    getBinaryPattern(grid) {
+      grid = this.getStringifiedGridArray(grid).split('').map(val => {
+        if (val === '*' || val == 1) {
+          return val = 1;
+        } else {
+          return val = 0;
+        }
+      });
+      return grid;
+    },
     handleClickToSave() {
+      // const newData = this.savedTrainingData.input.filter(inp => inp.length === 225);
+      // console.log(newData);
+      // this.savedTrainingData = newData;
+      // this.saveAITrainingData('swastika', newData).then(resp => {
+      //   console.log('resp', resp)
+      // })
       this.showingModal = 'save';
     },
-    async handleClickToBrowse() {
-      await this.refreshUserDiagrams();
+    async handleClickPrevious() {
+      if (!this.diagrams) {
+        this.diagrams = await this.refreshUserDiagrams();
+      }
+      const currentIndex = this.diagrams.indexOf(this.currentDiagram);
+      const prevIndex = currentIndex > 1 ? currentIndex - 1 : this.diagrams.length - 1;
+      const newDiagram = this.diagrams[prevIndex];
+      this.changeDiagram(newDiagram);
+    },
+    async handleClickNext() {
+      if (!this.diagrams) {
+        this.diagrams = await this.refreshUserDiagrams();
+      }
+      const currentIndex = this.diagrams.indexOf(this.currentDiagram);
+      const nextIndex = currentIndex < this.diagrams.length - 1 ? currentIndex + 1 : 0;
+      const newDiagram = this.diagrams[nextIndex];
+      this.changeDiagram(newDiagram);
+    },
+    handleClickToBrowse() {
+      this.diagrams = undefined;
       this.showingModal = 'browse';
+      this.refreshUserDiagrams(true);
+    },
+    async handleClickTrain() {
+      let ioArray = [];
+      console.warn(this.savedTrainingData)
+      this.savedTrainingData.input.forEach((cellArray, i) => {
+        ioArray[i] = {
+          input: cellArray,
+          output: this.savedTrainingData.output[i]
+        };
+      });
+      ioArray = ioArray.filter(item => item.input.length === 225);
+      gridScanner = new GridScanner;
+      gridScanner.refreshModel();
+      gridScanner.trainScanner(ioArray);
+      this.saveAIModelToDB();
+    },
+    async handleClickToLabel(diagramId, violation, violating) {
+      console.warn('handleClickToLabel received', diagramId, violation, violating);
+      let alreadyThere = [...this.savedTrainingData.diagramIds].indexOf(diagramId) > -1;
+      if (!alreadyThere) {
+        let grid = Object.values(this.diagrams).filter(diagram => diagram.id === diagramId)[0].cells;
+        // let flippedGrid = this.getFlippedCellGrid(grid);
+
+        let newTrainingData = {
+          input: [...this.savedTrainingData.input, this.getBinaryPattern(grid)],
+          output: [...this.savedTrainingData.output, { [violation]: violating }],
+          diagramIds: [...this.savedTrainingData.diagramIds, diagramId],
+        };
+        // let newTrainingData = {
+        //   input: [...this.savedTrainingData.input, this.getBinaryPattern(grid), this.getBinaryPattern(flippedGrid)],
+        //   output: [...this.savedTrainingData.output, { [violation]: violating }, { [violation]: violating }],
+        //   diagramIds: [...this.savedTrainingData.diagramIds, diagramId],
+        // };
+        this.savedTrainingData = newTrainingData;
+        let trainingResponse = await this.saveAITrainingData('swastika', newTrainingData);
+        console.warn('handleClickToLabel > saveAITrainingData --->', trainingResponse);
+      } else {
+        console.error(diagramId, 'is ALREADY IN savedTrainingData')
+      }
     },
     async refreshUserDiagrams() {
-      let resp = await this.getDiagrams();      
-      let diagramArray = resp.data;
-      diagramArray.forEach(diagramObj => {
+      let resp = await this.getDiagrams(); 
+      console.warn('resp', resp)     
+      let diagramArray = resp.data;        
+      diagramArray.map(diagramObj => {
         diagramObj.cells = this.buildArrayFromGridString(diagramObj.cells, diagramObj.width, diagramObj.height);
         diagramObj.width = parseInt(diagramObj.width);
         diagramObj.height = parseInt(diagramObj.height);
+        diagramObj.percentBlack = 0;
+        let percent = gridScanner.getGridAttribute(diagramObj.cells, 'swastika');
+        diagramObj.swastikaPercent = percent;
       });
-      let newDiagrams = diagramArray;
-      this.diagrams = newDiagrams;
+      console.log('made', diagramArray)
+      this.diagrams = diagramArray;
+      return diagramArray;
     },
-    handleSaveDiagram(creator) {
+    async saveAIModelToDB() {
+      let modelString = JSON.stringify(gridScanner.net.toJSON());
+      document.getElementById('model-display').innerText = 'SAVING...';
+      document.getElementById('model-display').style.display = 'block';
+      this.busySaving = true;
+      let saveAIResponse = await this.saveAIModel('swastika', modelString);
+      console.warn('save AI responded', saveAIResponse.data);
+      this.busySaving = false;
+      document.getElementById('model-display').innerText = 'SAVED!';
+      document.getElementById('model-display').style.background = 'green';
+      setTimeout(() => {
+        document.getElementById('model-display').style.display = 'none';
+      }, 1000)
+    },
+    async handleSaveDiagram(creator) {
       if (!creator) {
         creator = 'Leroy';
       }
       let cellString = this.getStringifiedGridArray([...this.cellGrid]);
-      let width = this.boardSize.width;
-      let height = this.boardSize.height;
-      this.saveDiagram(cellString, width, height, creator).then(response => {
-        console.error('saveDiagram responded', response)
-        if (response.data === 'DIAGRAM SAVED :)') {
+      let uniqueResponse = await this.checkIfDiagramExists(cellString);
+      if (!uniqueResponse.data) {
+        console.error('DIAGRAM IS UNIQUE!', uniqueResponse.data)
+        let width = this.boardSize.width;
+        let height = this.boardSize.height;
+        let saveResponse = await this.saveDiagram(cellString, width, height, creator)
+        if (saveResponse.data) {
+          console.error('saveDiagram ---->', saveResponse);
           this.showingModal = undefined;
         }
-      })
+      } else {
+        this.saveMessage = `DIAGRAM EXISTS! as ID#${uniqueResponse.data}`;
+        setTimeout(() => {
+          this.saveMessage = ``;
+        }, 3000);
+      }
+    },
+    async handleClickDeleteDiagram(id) {
+      let response = await this.removeDiagram(id);
+      if (response.data) {
+        await this.refreshUserDiagrams();
+      } else {
+        console.error('handleClickDeleteDiagram ERROR')
+      }
     },
     buildArrayFromGridString(gridString, width, height) {
       let grid = [];
@@ -129,10 +332,10 @@ export default {
           let stringChar = gridString[cellsDone];
           let shaded;
           let letter;
-          if (stringChar === '*') {
+          if (stringChar === '*' || stringChar == '1') {
             shaded = true;
             letter = '';
-          } else if (stringChar === '0') {
+          } else if (stringChar == '0') {
             shaded = false;
             letter = '';
           } else {
@@ -164,6 +367,71 @@ export default {
       }
       return cellString;
     },
+    getWordsNeeded() {
+      let violations = [];
+      let newWordsNeeded = {
+        across: [],
+        down: []
+      };
+      this.cellGrid.forEach((row, r) => {
+        row.forEach((cell, c) => {
+          if (cell.number) {
+            cell.letter = '';
+            console.warn(cell.number, '----------------------------')
+            console.log('cell', r, c);
+            let blankToLeft = c === 0 || row[c - 1].shaded;
+            let blankAbove = r === 0 || this.cellGrid[r - 1][c].shaded;
+            let wordLengthToRight;
+            let wordLengthBelow;
+            if (blankToLeft) {
+              for (let k=c+1; k < row.length; k++) {
+                let rowCell = row[k];
+                if (rowCell.shaded) {
+                  wordLengthToRight = k - c;
+                  cell.letter = wordLengthToRight.toString();
+                  break;           
+                }
+                if (k === row.length - 1) {
+                  wordLengthToRight = k - c + 1;
+                  cell.letter = wordLengthToRight.toString();
+                  break;
+                }
+              }
+            }
+            if (blankAbove) {
+              for (let h=r+1; h < this.cellGrid.length; h++) {
+                let gridRow = this.cellGrid[h];
+                if (gridRow[c].shaded) {
+                  wordLengthBelow = h - r;
+                  cell.letter += '/' + wordLengthBelow.toString();
+                  break;        
+                }
+                if (h === this.cellGrid.length - 1) {
+                  wordLengthBelow = h - r + 1;
+                  cell.letter += '/' + wordLengthBelow.toString();
+                  break;  
+                }
+              }             
+            }
+            console.log('cell', r, c, 'right:', wordLengthToRight, ' below', wordLengthBelow);
+            if (wordLengthToRight) {
+              newWordsNeeded.across.push({
+                number: cell.number,
+                word: '*'.repeat(wordLengthToRight),
+              });
+            }
+            if (wordLengthBelow) {
+              newWordsNeeded.down.push({
+                number: cell.number,
+                word: '*'.repeat(wordLengthBelow)
+              });
+            }                   
+          }
+        });
+      });
+      this.wordsNeeded = newWordsNeeded;
+      return newWordsNeeded;
+    },
     getFullWordListOfLength(length) {
       return axios({
         method: 'post',
@@ -174,6 +442,18 @@ export default {
         data: {
           length: length
         },
+      });
+    },
+    checkIfDiagramExists(cellString) {      
+      return axios({
+        method: 'post',
+        url: 'https://api.eggborne.com/crossword/checkifdiagramexists.php',
+        headers: {
+          'Content-type': 'application/x-www-form-urlencoded'
+        },
+        data: {
+          cells: cellString
+        }
       });
     },
     saveDiagram(cellString, width, height, creator) {      
@@ -188,6 +468,70 @@ export default {
           width: width,
           height: height,
           creator: creator,
+        }
+      });
+    },
+    getAIModel(attribute) {
+      return axios({
+        method: 'post',
+        url: 'https://api.eggborne.com/crossword/getaimodel.php',
+        headers: {
+          'Content-type': 'application/x-www-form-urlencoded'
+        },
+        data: {
+          attribute: attribute
+        }
+      });
+    },
+    saveAIModel(attribute, model) {
+      console.log('sending', attribute, model.length)  
+      return axios({
+        method: 'post',
+        url: 'https://api.eggborne.com/crossword/saveaimodel.php',
+        headers: {
+          'Content-type': 'application/x-www-form-urlencoded'
+        },
+        data: {
+          attribute: attribute,
+          model: model
+        }
+      });
+    },
+    saveAITrainingData(attribute, trainingData) {
+      trainingData = JSON.stringify(trainingData);
+      console.log('sending', attribute, trainingData.length)  
+      return axios({
+        method: 'post',
+        url: 'https://api.eggborne.com/crossword/saveaitrainingdata.php',
+        headers: {
+          'Content-type': 'application/x-www-form-urlencoded'
+        },
+        data: {
+          trainingData: trainingData
+        }
+      });
+    },
+    getAITrainingData(attribute) {      
+      return axios({
+        method: 'post',
+        url: 'https://api.eggborne.com/crossword/getaitrainingdata.php',
+        headers: {
+          'Content-type': 'application/x-www-form-urlencoded'
+        },
+        data: {
+          attribute: attribute,
+        }     
+      });
+    },
+    removeDiagram(id) {   
+      return axios({
+        method: 'post',
+        url: 'https://api.eggborne.com/crossword/removediagram.php',
+        headers: {
+          'Content-type': 'application/x-www-form-urlencoded'
+        },
+        data: {
+          id: parseInt(id),
         }
       });
     },
@@ -214,19 +558,23 @@ export default {
         });
       });
     },
-    handleClickChooseDiagram(newDiagram) {
+    changeEditMode(e) {
+      let newMode = e.target.id.split('-')[0];
+      this.selectedCellIndex = undefined;
+      this.editMode = newMode;
+    },
+    changeDiagram(newDiagram) {
       this.showingModal = undefined;
       if (newDiagram.width !== this.boardSize.width || newDiagram.height !== this.boardSize.height) {
-        this.adjustRangedOption('diagramSize', newDiagram.width);
-        document.getElementById('diagram-slider').value = newDiagram.width;
+        this.adjustOption('diagramSize', newDiagram.width);
+        // document.getElementById('diagram-slider').value = newDiagram.width;
       }
+      this.currentDiagram = newDiagram;
       this.cellGrid = newDiagram.cells;
+      this.swastikaQuotient = gridScanner.getGridAttribute(newDiagram.cells, 'swastika');
       this.addCellLabels();
     },
-    handleClickCancelSave() {
-      this.showingModal = undefined;
-    },
-    handleClickCancelBrowse() {
+    handleClickCancelModal() {
       this.showingModal = undefined;
     },
     // const wordArrayOfLength = (length) => {
@@ -244,6 +592,7 @@ export default {
     //   })
     // },
     createGrid(size, destroyFirst) {
+      let startTime = window.performance.now();
       let width = size.width;
       let height = size.height;
       let grid = [];
@@ -257,8 +606,10 @@ export default {
             row: r, column: c, letter: '', number: '', shaded: false,	selected: false
           };
         }
-      }
+      }      
       this.cellGrid = grid;
+      this.addCellLabels();
+      console.error('grid created and labeled in', window.performance.now() - startTime)
     },
     getMirrorCoords(symmetry, startingCoords) {
       let coordArray = [];
@@ -282,8 +633,8 @@ export default {
         coordArray.push(mirrorCoords2);      
       }
       return coordArray;
-    },
-    handleCellClick(e) {
+    },  
+    handleCellFlip(e) {
       const clickedIndex = e.target.id.split('-')[1];
       const cellCoords = { row: this.cellGrid.flat()[clickedIndex].row, column: this.cellGrid.flat()[clickedIndex].column, };
       const newCellGrid = [...this.cellGrid];
@@ -294,9 +645,17 @@ export default {
         let mirrorCell = newCellGrid[coords.row][coords.column];
         mirrorCell.shaded = newShadedStatus;
       });
-      this.addCellLabels()
-      // this.cellGrid = newCellGrid;
+      // this.getWordsNeeded();
+      requestAnimationFrame(() => {
+        this.addCellLabels();
+        this.getWordsNeeded();
+        this.swastikaQuotient = gridScanner.getGridAttribute(newCellGrid, 'swastika');  
+      });
     },    
+    handleCellSelect(e) {
+      const clickedIndex = parseInt(e.target.id.split('-')[1]);
+      this.selectedCellIndex = clickedIndex;    
+    },  
     addCellLabels() {
       let start = window.performance.now();
       let updatedCells = [...this.cellGrid];
@@ -329,43 +688,175 @@ export default {
       if (optionName === 'symmetry') {
         this.symmetry = newValue;
       }
-    },
-    adjustRangedOption(optionName, newValue) {
-      let optionData = this.options[optionName];      
       if (optionName === 'diagramSize') {
-        this.boardSize = {
-          width: parseInt(newValue), height: parseInt(newValue)
-        };
-        this.cellGrid = [];
-        this.createGrid(this.boardSize, true)
-        document.documentElement.style.setProperty(optionData.cssVar, `${newValue}${optionData.cssUnit}   `);
-        document.documentElement.style.setProperty('--cells-high', `${newValue}${optionData.cssUnit}`);
+        let startTime = window.performance.now();
+          this.boardSize = {
+            width: parseInt(newValue), height: parseInt(newValue)
+          };
+          this.cellGrid = [];
+          this.createGrid(this.boardSize, true);
+          document.documentElement.style.setProperty(optionData.cssVar, `${newValue}${optionData.cssUnit}   `);
+          document.documentElement.style.setProperty('--cells-high', `${newValue}${optionData.cssUnit}`);
+          console.error('board resized in', window.performance.now() - startTime);
+          this.swastikaQuotient = 0;       
       }
     },
+    adjustRangedOption(optionName, newValue) {
+      let optionData = this.options[optionName];
+    },
     clearBoard(e, shade) {
-      let updatedCells = [...this.cellGrid];
-      [...updatedCells].forEach((row, r, rowsArray) => {
-        updatedCells[r] = row.map((cell, c, cellArray) => {                  
-          let newCell = { ...cell };
-          newCell.letter = '';          
-          newCell.number = '';          
-          newCell.shaded = shade;          
-          newCell.selected = false;          
-          return cell = newCell;
-        });
-      });
-      this.cellGrid = updatedCells;
+      this.auditMode = !this.auditMode;
+      e.target.classList.toggle('highlighted')
+      // console.log('claering')
+      // let updatedCells = [...this.cellGrid];
+      // [...updatedCells].forEach((row, r, rowsArray) => {
+      //   updatedCells[r] = row.map((cell, c, cellArray) => {                  
+      //     let newCell = { ...cell };
+      //     newCell.letter = '';          
+      //     newCell.number = '';          
+      //     newCell.shaded = shade;          
+      //     newCell.selected = false;          
+      //     return cell = newCell;
+      //   });
+      // });
+      // this.cellGrid = updatedCells;
+      // this.addCellLabels();
+      // this.swastikaQuotient = 0;
+    },
+    getViolatingBoard(iterations) {
+      let scores = [];
+      let newAuditList = [];
+      for (var i=0; i<iterations; i++) {
+        // let randomPattern = this.getRandomBinaryPattern(randomInt(10,30));
+        let randomPattern = this.getRandomBinaryPattern(17);
+        let newGrid = this.buildArrayFromGridString(randomPattern, this.boardSize.width, this.boardSize.height);
+        
+        let gridScore = gridScanner.getGridAttribute(newGrid, 'swastika');
+        // console.log('newgrd score', gridScore)
+        scores.push({grid: newGrid, score: gridScore})
+      }
+      let sortedScores = scores.sort((a, b) => b.score - a.score);
+      for (let i = 0; i < 15; i++) {
+        let diagramObj = {};
+        diagramObj.cells = sortedScores[i].grid;
+        diagramObj.width = this.boardSize.width;
+        diagramObj.height = this.boardSize.height;
+        diagramObj.percentBlack = 0;
+        diagramObj.swastikaPercent = sortedScores[i].score;
+        // console.log('puishing diagramObj', diagramObj)
+        newAuditList.push(diagramObj);
+      }
+      let reversedScores = [...sortedScores].reverse();
+      for (let i = 0; i < 15; i++) {
+        let diagramObj = {};
+        diagramObj.cells = reversedScores[i].grid;
+        diagramObj.width = this.boardSize.width;
+        diagramObj.height = this.boardSize.height;
+        diagramObj.percentBlack = 0;
+        diagramObj.swastikaPercent = reversedScores[i].score;
+        // console.log('puishing diagramObj', diagramObj)
+        newAuditList.push(diagramObj);
+      }
+      console.log('scores', scores);
+      const topScorer = sortedScores[0];
+      console.log('topScorer', topScorer);
+      this.cellGrid = topScorer.grid;
+      this.swastikaQuotient = topScorer.score;
+      console.log('list is', newAuditList.length, newAuditList)
+      this.auditList = newAuditList;
+    },
+    getRandomBoard(blackPercent) {
+
     },
     shadeBoard(e) {
-      this.clearBoard(e, true);
+      diagramCreator.imageTo2Bit('board-image');
+      // this.getViolatingBoard(1000)
+
+      // let cellString = this.getBinaryPattern([...this.cellGrid]);
+      // let newGrid = this.buildArrayFromGridString()
+
+      // this.getViolatingBoard(20);          
+      // this.clearBoard(e, true);
+    },
+    getRandomBinaryPattern(percentBlack) {
+      let binaryArray = new Array(225);
+      let toBeShaded = [];
+      let symmDivider = this.symmetry * 2;
+      if (symmDivider === 0) {
+        symmDivider = 1;
+      }
+      let actualChance = (percentBlack / symmDivider);
+      for (let i=0; i < 225; i++) {
+        if (binaryArray[i] !== 1) {
+          let isShaded = 0;
+          isShaded = randomInt(0, 100) < actualChance ? 1 : 0;
+          binaryArray[i] = isShaded;
+          if (isShaded) {
+            let coords = {
+              row: (i - (i % this.boardSize.height)) / this.boardSize.height,
+              column: ((i) % this.boardSize.width)
+            }
+            let mirrorCoords = this.getMirrorCoords(this.symmetry, coords);
+            mirrorCoords.forEach(coordSet => {
+              let totalIndex = (coordSet.row * this.boardSize.height) + coordSet.column;
+              // binaryArray[totalIndex] = 1;
+              toBeShaded.push(totalIndex)
+            })
+            // console.log('mirror is', mirrorCoords);
+          }
+        }
+      }
+      toBeShaded.forEach(ind => {
+        binaryArray[ind] = 1;
+      })
+      return binaryArray;
+    },
+    async scanBoardForImage() {
+      // let boardDiv = document.getElementById('puzzle-board');
+      // let image = document.getElementById('board-image');
+      // let dataUrl = await htmlToImage.toPng(boardDiv);
+      // image.src = dataUrl;
+      // boardScanner.classify(image, (err, results) => {
+      //   console.log(results[0]);
+      //   let result = { 
+      //     label: results[0].label,
+      //     confidence: (results[0].confidence * 100).toFixed(2)
+      //   }
+      //   console.log(result);
+      //   document.getElementById('model-display').style.display = 'block';
+      //   document.getElementById('model-display').innerText = `${result.label} ${result.confidence}%`;
+      //   setTimeout(() => {
+      //     document.getElementById('model-display').style.display = 'none';
+      //   }, 2000)
+      // });
     }
   }
 };
 </script>
 
 <style scoped>
+#board-image {
+  /* display: none; */
+}
+#model-display {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, 0);
+  /* width: 100px;
+  height: 100px; */
+  font-size: 1.5rem;
+  font-weight: 700;
+  padding: 2vh;
+  width: 100%;
+  background: #00000099;
+  text-align: center;
+  display: none;
+  z-index: 4;
+}
 .home {
   min-height: var(--view-height);
+  max-height: var(--view-height);
   display: grid;
   grid-template-rows:
     var(--header-height)
@@ -373,6 +864,17 @@ export default {
     1fr
     /* var(--footer-height) */
   ;
+  /* overflow-y: auto; */
+}
+#board-canvas {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  bottom: 20vmin;
+  left: 50%;
+  transform: translate(-50%, 0);
+  box-shadow: 0 0 4px 1px black;
+  /* background: var(--cell-color); */
 }
 #dark-mask {
   position: fixed;

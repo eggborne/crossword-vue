@@ -6,6 +6,8 @@ import './registerServiceWorker';
 
 window.addEventListener('load', () => {
   console.error('LOADED.');
+  const manifest = require("../public/manifest.json");
+  document.querySelector("meta[name=theme-color]").setAttribute("content", manifest.theme_color);
 });
 
 Vue.config.productionTip = false;

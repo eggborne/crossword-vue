@@ -1,5 +1,5 @@
 <template>
-	<div class="board">
+	<div id='puzzle-board' class="board">
 		<Cell
 			v-for='(cellData, i) in cellGrid.flat()'
 			v-bind:key='i'
@@ -8,7 +8,7 @@
 			:letter='cellData.letter'
 			:number='cellData.number'
 			:shaded='cellData.shaded'
-			:selected='cellData.selected'
+			:selected='i === selectedCellIndex'
 			:row='cellData.row'
 			:column='cellData.column'
 			:handleClick='handleCellClick'
@@ -23,6 +23,7 @@ export default {
   name: 'Board',
   props: {
 		cellGrid: Array,
+		selectedCellIndex: Number,
 		handleCellClick: Function
   },
   components: {

@@ -1,5 +1,5 @@
 <template>
-	<button v-on:pointerdown='handleClick'>
+	<button @pointerdown='handleClick'>
 		{{ label.toUpperCase() }}
 	</button>
 </template>
@@ -8,7 +8,8 @@
 export default {
 	name: 'Button',
 	props: {
-    label: String,
+		label: String,
+		clickType: String,
     handleClick: Function
 	}
 };
@@ -32,5 +33,8 @@ button {
 }
 button:active {
   background-color: var(--button-on-color);
+}
+.highlighted {
+	background-color: orange;
 }
 </style>

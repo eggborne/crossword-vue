@@ -1,21 +1,15 @@
 <template>
-	<div id="select-bar">
+	<div class="select-bar">
 		<div class="select-label">{{ option.title }}</div>
-    <Button 
-      :class='targetValue === 0 && `selected`'
-			:label='`Off`'
-			:handleClick='() => adjustOption(option.name, 0)'
-    />
-    <Button 
-      :class='targetValue === 1 && `selected`'
-			:label='`2X`'
-			:handleClick='() => adjustOption(option.name, 1)'
-    />
-    <Button 
-      :class='targetValue === 2 && `selected`'
-			:label='`4X`'
-			:handleClick='() => adjustOption(option.name, 2)'
-    />		
+		<div class='button-row'>
+			<Button 
+				v-for='(button, i) in buttons'
+				v-bind:key='i'
+				:class='targetValue === i && `selected`'
+				:label='button.labelText'
+				:handleClick='() => adjustOption(option.name, button.valueAmount)'
+			/>
+		</div>
 	</div>
 </template>
 
@@ -27,53 +21,54 @@ export default {
 		currentValue: ''
 	}),
 	props: {
+		buttons: Array,
 		rangeValue: Number,
     option: Object,
     targetValue: Number,
-    targetValue: Number,
     adjustOption: Function,
-		adjustRangedOption: Function
   },
   components: {
     Button
   },
 	created() {
-		this.currentValue = this.rangeValue || this.option.defaultValue;
+		this.currentValue = this.targetValue || this.option.defaultValue;
 	}
 };
 </script>
 
 <style scoped>
-#select-bar {
+.select-bar {
 	grid-column-end: span 2;
 	width: 100%;
 	display: flex;
-	align-items: center;
+	flex-direction: column;
+	height: 100%;
 }
-#select-bar > button {
-  height: 100%;
-  width: 100%;
+.button-row {
+	display: flex;
+	width: 100%;
+	flex-grow: 1;
+}
+.button-row > button {
+	width: 100%;
 	border-width: 1px;
-	height: calc(var(--header-height) * 1.25);
+	border-radius: 0;
 }
-#select-bar > button.selected {
+.select-bar button.selected {
   background: blue;
 }
-#select-bar > button:nth-of-type(1) {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+.select-bar button:last-of-type {
+  border-top-right-radius: calc(var(--main-padding) / 3);
+  border-bottom-right-radius: calc(var(--main-padding) / 3);
 }
-#select-bar > button:nth-of-type(2) {
-  border-radius: 0;
-}
-#select-bar > button:nth-of-type(3) {
- border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
+.select-bar button:first-of-type {
+	border-top-left-radius: calc(var(--main-padding) / 3);
+  border-bottom-left-radius: calc(var(--main-padding) / 3);
 }
 .select-label {
   width: calc(var(--header-height) * 1.5);
 	font-weight: 700;
-	padding-right: calc(var(--main-padding) / 2);
+	padding-bottom: calc(var(--main-padding) / 4);
 	text-shadow: -1px -1px 0 #00000088, 1px -1px 0 #00000088, -1px 1px 0 #00000088,
 		2px 1px 0 #00000088;
 }

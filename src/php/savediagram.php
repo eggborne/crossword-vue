@@ -10,8 +10,6 @@
 
   if ($userResult) {
     echo 'DIAGRAM SAVED :)';
-  } else {
-    echo 'DIAGRAM NOT SAVED.';
   }
 	mysqli_close($link);
 ?>
