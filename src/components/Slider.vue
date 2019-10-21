@@ -9,26 +9,26 @@
 			type="range"
 			:step="option.step"
 			:min="option.minValue"
-			:max="option.maxValue"			
+			:max="option.maxValue"
 		/>
 	</div>
 </template>
 
 <script>
 export default {
-	name: 'Slider',
-	data: () => ({
+  name: 'Slider',
+  data: () => ({
     currentValue: undefined,
     lastChanged: 0
-	}),
-	props: {
-		boardSize: Object,
-		rangeValue: Number,
-		option: Object,
-		adjustRangedOption: Function
-	},
-	created() {
-		this.currentValue = this.rangeValue || this.option.defaultValue;
+  }),
+  props: {
+    boardSize: Object,
+    rangeValue: Number,
+    option: Object,
+    adjustRangedOption: Function
+  },
+  created() {
+    this.currentValue = this.rangeValue || this.option.defaultValue;
   },
   methods: {
     handleChangeSliderValue(e) {
@@ -52,7 +52,7 @@ export default {
   padding-right: calc(var(--main-padding) / 2);
   display: flex;
   justify-content: flex-end;
-  align-items: center;  
+  align-items: center;
 	font-weight: 700;
 	text-shadow: -2px -1px 0 #00000088, 2px -1px 0 #00000088, -2px 1px 0 #00000088,
 		2px 1px 0 #00000088;

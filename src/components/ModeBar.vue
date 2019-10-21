@@ -45,7 +45,7 @@ export default {
   justify-content: flex-end;
 }
 .mode-pane {
-  height: 90%;
+  height: 100%;
   width: calc(100% - (var(--main-padding) / 2));
   display: flex;
   align-items: center;

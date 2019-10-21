@@ -2,7 +2,7 @@
 	<div class="select-bar">
 		<div class="select-label">{{ option.title }}</div>
 		<div class='button-row'>
-			<Button 
+			<Button
 				v-for='(button, i) in buttons'
 				v-bind:key='i'
 				:class='targetValue === i && `selected`'
@@ -15,14 +15,15 @@
 
 <script>
 import Button from './Button';
+
 export default {
-	name: 'SelectBar',
-	data: () => ({
-		currentValue: ''
-	}),
-	props: {
-		buttons: Array,
-		rangeValue: Number,
+  name: 'SelectBar',
+  data: () => ({
+    currentValue: ''
+  }),
+  props: {
+    buttons: Array,
+    rangeValue: Number,
     option: Object,
     targetValue: Number,
     adjustOption: Function,
@@ -30,9 +31,9 @@ export default {
   components: {
     Button
   },
-	created() {
-		this.currentValue = this.targetValue || this.option.defaultValue;
-	}
+  created() {
+    this.currentValue = this.targetValue || this.option.defaultValue;
+  }
 };
 </script>
 
@@ -45,17 +46,10 @@ export default {
 	height: 100%;
 }
 .button-row {
+	position: relative;
 	display: flex;
-	width: 100%;
+	/* max-width: 100%; */
 	flex-grow: 1;
-}
-.button-row > button {
-	width: 100%;
-	border-width: 1px;
-	border-radius: 0;
-}
-.select-bar button.selected {
-  background: blue;
 }
 .select-bar button:last-of-type {
   border-top-right-radius: calc(var(--main-padding) / 3);
@@ -68,7 +62,7 @@ export default {
 .select-label {
   width: calc(var(--header-height) * 1.5);
 	font-weight: 700;
-	padding-bottom: calc(var(--main-padding) / 4);
+	/* padding-bottom: calc(var(--main-padding) / 4); */
 	text-shadow: -1px -1px 0 #00000088, 1px -1px 0 #00000088, -1px 1px 0 #00000088,
 		2px 1px 0 #00000088;
 }

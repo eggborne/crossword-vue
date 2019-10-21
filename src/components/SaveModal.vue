@@ -1,8 +1,8 @@
 <template>
 	<div class="save-modal">
-    Creator: <input 
-    id='name-input' 
-    type='text' 
+    Creator: <input
+    id='name-input'
+    type='text'
     placeholder='Leroy'
     v-model='nameValue'
     v-on:input='handleNameChange'
@@ -11,13 +11,13 @@
       <slot></slot>
     </div>
     <div id='save-button-area'>
-      <Button 
+      <Button
         id='cancel-button'
-        :label="`Cancel`" :handleClick="handleClickCancelSave" 
+        :label="`Cancel`" :handleClick="handleClickCancelSave"
       />
       <Button
         id='save-button'
-        :label="`Save`" :handleClick="() => handleSaveDiagram(nameValue)" 
+        :label="`Save`" :handleClick="() => handleSaveDiagram(nameValue)"
       />
     </div>
 	</div>
@@ -28,11 +28,12 @@
 <script>
 import Button from './Button';
 import Spinner from './Spinner';
+
 export default {
   name: 'SaveModal',
   data: () => ({
-    nameValue: '',  
-  }),  
+    nameValue: '',
+  }),
   props: {
     handleSaveDiagram: Function,
     handleClickCancelSave: Function,
@@ -72,6 +73,10 @@ export default {
 .status-area {
   height: var(--header-height);
   font-size: 1rem;
+  font-weight: 700;
+  color: green;
+}
+.status-area.error {
   color: red;
 }
 #save-button-area {
@@ -84,7 +89,6 @@ export default {
 }
 button {
   height: 100%;
-  
 }
 #save-button {
   font-size: 1.5rem;
@@ -92,7 +96,7 @@ button {
   margin-left: var(--main-padding);
 }
 #cancel-button {
-  font-size: 0.8rem;  
+  font-size: 0.8rem;
   padding: 0 calc(var(--header-height) / 2);
   background: rgb(123, 124, 95)
 }

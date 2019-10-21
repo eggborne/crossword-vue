@@ -8,22 +8,23 @@
 
 <script>
 import Button from '../components/Button';
+
 export default {
   name: 'ControlPanel',
   data: () => ({
     diagrams: []
   }),
-	props: {
-		
-	},
-	components: {
-		Button,
+  props: {
+
+  },
+  components: {
+    Button,
   },
   created: {
 
   },
   methods: {
-    
+
   }
 };
 </script>
@@ -43,6 +44,6 @@ button {
   font-size: 1.25em;
 }
 @media (orientation: landscape) {
-	
+
 }
 </style>

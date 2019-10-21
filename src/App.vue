@@ -1,5 +1,5 @@
 <template>
-	<div id="app">    
+	<div id="app">
 		<router-view />
 		<!-- <div id="nav">
 			<router-link to="/">Home</router-link> |
@@ -12,7 +12,7 @@
 
 export default {
   name: 'App',
-  created() {    
+  created() {
     console.error('APP created');
     document.documentElement.style.setProperty('--view-height', `${window.innerHeight}px`);
     window.addEventListener('resize', () => {
@@ -36,9 +36,10 @@ export default {
   --header-height: 2.5rem;
   --footer-height: 1.5rem;
   --main-padding: 0.75rem;
-  --board-size: calc(100vw - var(--main-padding) * 2.5);
+  --board-size: calc(100vw - var(--main-padding) * 3.5);
   --body-bg-color: #c8c8c8;
-  --header-color: #2d3038;
+  /* --header-color: #2d3038; */
+  --header-color: #153282;
   --blank-color: #111;
   --cell-color: white;
   --button-color: rgb(58, 66, 109);
@@ -89,10 +90,7 @@ h1 {
   justify-items: stretch;
   grid-template-rows:
     var(--header-height)
-    /* 100vmin */
-    /* auto */
     1fr
-    /* var(--footer-height) */
   ;
 }
 #nav {

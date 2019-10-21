@@ -15,7 +15,7 @@ export default {
     direction: Number // -1 or 1
   },
   created() {
-    document.documentElement.style.setProperty('--spin-direction', this.direction)
+    document.documentElement.style.setProperty('--spin-direction', this.direction);
   }
 };
 </script>

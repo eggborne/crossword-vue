@@ -6,12 +6,12 @@
 
 <script>
 export default {
-	name: 'Button',
-	props: {
-		label: String,
-		clickType: String,
+  name: 'Button',
+  props: {
+    label: String,
+    clickType: String,
     handleClick: Function
-	}
+  }
 };
 </script>
 

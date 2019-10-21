@@ -9,15 +9,15 @@
         :adjustOption="changeSort"
       />
     </header>
-    <div v-if='diagrams' class='diagram-list'>      
+    <div v-if='diagrams' class='diagram-list'>
       <div
         class='browse-diagram'
         v-for='diagram in sortedDiagrams'
         v-on:click='() => handleClickDiagram(diagram)'
         v-bind:key='diagram.id'
       >
-      <MiniBoard 
-        :id='diagram.id'        
+      <MiniBoard
+        :id='diagram.id'
         :width='diagram.width'
         :height='diagram.height'
         :cellGrid='diagram.cells'
@@ -30,10 +30,10 @@
       <div class='list-margin'></div>
     </div>
 
-    <div v-else class='diagram-list'>   
+    <div v-else class='diagram-list'>
       <Spinner :direction='-1' />
-      <div class='load-message'>loading...</div>
-    </div>   
+      <!-- <div class='load-message'>loading...</div> -->
+    </div>
 
     <div v-if='diagramSelected' class='info-area'>
       <div class='text-area'>
@@ -52,26 +52,26 @@
       </div>
       <div class='button-area'>
         <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
-          :label="`NOT A SWASTIKA`" :handleClick="() => {
+          :label="`NOT SWASTIKA`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 0);
-          }" 
+          }"
         />
         <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
-          :label="`MAYBE A SWASTIKA`" :handleClick="() => {
+          :label="`SWASTIKA?`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 0.5);
-          }" 
+          }"
         />
         <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
-          :label="`IS A SWASTIKA`" :handleClick="() => {
+          :label="`IS SWASTIKA`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 1);
-          }" 
+          }"
         />
         <Button id='delete-button'
           :label="`DELETE`" :handleClick="() => {
-            callConfirmModal(`Really delete diagram #${diagramSelected.id}?`);          
-          }" 
+            callConfirmModal(`Really delete diagram #${diagramSelected.id}?`);
+          }"
         />
-      </div>      
+      </div>
     </div>
     <div v-else class='info-area'>
       Select a diagram for info
@@ -79,20 +79,20 @@
     <div class='status-area'>
       savedTrainingData length: {{ savedTrainingData.diagramIds.length }}
     </div>
-    <div id='browse-button-area'>    
-      <Button 
-        :label="`BACK`" :handleClick="handleClickCancelBrowse" 
+    <div id='browse-button-area'>
+      <Button
+        :label="`BACK`" :handleClick="handleClickCancelBrowse"
       />
-      <Button 
+      <Button
         :class='diagramSelected || `disabled`'
-        :label="`LOAD`" :handleClick="() => handleClickChooseDiagram(diagramSelected)" 
+        :label="`LOAD`" :handleClick="() => handleClickChooseDiagram(diagramSelected)"
       />
     </div>
     <div v-if='confirmShowing' class='confirm-modal'>
       <div>{{ confirmMessage }}</div>
       <div>
-      <MiniBoard 
-        :id='diagramSelected.id'        
+      <MiniBoard
+        :id='diagramSelected.id'
         :width='diagramSelected.width'
         :height='diagramSelected.height'
         :cellGrid='diagramSelected.cells'
@@ -101,19 +101,19 @@
         :mlLabel='savedTrainingData.diagramIds.indexOf(diagramSelected.id) > -1 ? savedTrainingData.output[savedTrainingData.diagramIds.indexOf(diagramSelected.id)][`swastika`] : 0'
       />
       </div>
-      <Button 
+      <Button
         :label='`CANCEL`' :clickType='`click`' :handleClick='() => {
           confirmShowing = false;
         }'
       />
-      <Button 
+      <Button :class='`md-dense`'
         :label='`DELETE`' :clickType='`click`' :handleClick='() => {
           handleClickDeleteDiagram(diagramSelected.id);
           diagramSelected = undefined;
           confirmShowing = false;
         }'
       />
-    </div>    
+    </div>
 	</div>
 </template>
 
@@ -122,33 +122,35 @@ import Button from './Button';
 import MiniBoard from './MiniBoard';
 import SelectBar from './SelectBar';
 import Spinner from './Spinner';
+
 export default {
   name: 'BrowseModal',
   data: () => ({
     confirmShowing: false,
     confirmMessage: '',
     diagramSelected: undefined,
-    sortType: 'date',    
+    sortType: 'date',
     sortButtons: [
       {
-				labelText: 'Date',
-				valueAmount: 'date'
-			},
+        labelText: 'Date',
+        valueAmount: 'date'
+      },
       {
-				labelText: 'Size',
-				valueAmount: 'size'
-			},
+        labelText: 'Size',
+        valueAmount: 'size'
+      },
       {
-				labelText: '% Black',
-				valueAmount: 'shaded'
-			},
+        labelText: '% Black',
+        valueAmount: 'shaded'
+      },
       {
-				labelText: 'Swastika',
-				valueAmount: 'swastika'
-			}
+        labelText: 'Swastika',
+        valueAmount: 'swastika'
+      }
     ]
-  }),  
+  }),
   props: {
+    auditMode: Boolean,
     diagrams: Array,
     savedTrainingData: Object,
     handleClickChooseDiagram: Function,
@@ -164,9 +166,8 @@ export default {
   },
   computed: {
     sortedDiagrams() {
-      let diagramList = [...this.diagrams];
-      diagramList.forEach(diagram => diagram.percentShaded = 
-      ((diagram.cells.flat().filter(cell => cell.shaded).length / diagram.cells.flat().length) * 100).toFixed(1));
+      const diagramList = [...this.diagrams];
+      diagramList.forEach(diagram => diagram.percentShaded = ((diagram.cells.flat().filter(cell => cell.shaded).length / diagram.cells.flat().length) * 100).toFixed(1));
       let sortAttr = 'id';
       if (this.sortType === 'size') {
         sortAttr = 'width';
@@ -177,7 +178,7 @@ export default {
       if (this.sortType === 'swastika') {
         sortAttr = 'swastikaPercent';
       }
-      let sortedDiagramList = diagramList.sort((a, b) => parseInt(b[sortAttr]) - parseInt(a[sortAttr]));      
+      let sortedDiagramList = diagramList.sort((a, b) => parseInt(b[sortAttr]) - parseInt(a[sortAttr]));
       if (sortAttr === 'width' || sortAttr === 'percentShaded') {
         sortedDiagramList = sortedDiagramList.reverse();
       }
@@ -187,7 +188,7 @@ export default {
   methods: {
     handleClickDiagram(diagram) {
       if (this.diagramSelected !== diagram) {
-        this.diagramSelected = diagram
+        this.diagramSelected = diagram;
       }
     },
     changeSort(name, newSort) {
@@ -225,7 +226,7 @@ export default {
 
 	box-shadow: 1px 1px calc(var(--main-padding) / 2) #00000066,
 		-1px -1px calc(var(--main-padding) / 2) #00000066;
-    z-index: 1;
+  z-index: 1;
 }
 .browse-modal::before {
   position: fixed;
@@ -236,6 +237,7 @@ export default {
   width: 100vw;
   height: var(--view-height);
   display: none;
+  z-index: 2
 }
 .browse-modal.showing-modal::before, .browse-modal.showing-modal .confirm-modal {
   display: unset;
@@ -345,21 +347,23 @@ header span {
   grid-column-start: 3;
 }
 .info-area button:first-of-type {
-  background: rgb(114, 170, 82);
+  background: rgb(114, 170, 82) !important;
 }
 .info-area button:nth-of-type(2) {
-  background: rgb(209, 186, 108);
+  background: rgb(209, 186, 108) !important;
 }
 .info-area button {
-  padding: var(--main-padding);
   height: var(--header-height);
+  width: 25vw;
   align-self: flex-end;
-  background-color: rgb(110, 63, 63);
+  background-color: rgb(110, 63, 63) !important;
+  font-size: 0.6rem;
+  font-weight: normal;
 }
 #delete-button {
   background-color: rgb(124, 58, 58);
-  color: rgb(190, 143, 143);
-  transform: scale(0.9);
+  color: rgb(213, 188, 188);
+  transform: scale(0.89);
   transform-origin: center;
   justify-self: end;
 }
@@ -398,7 +402,7 @@ header span {
   top: 50%;
   left: 50%;
   width: 90vw;
-  min-height: calc(var(--board-size) / 1.5);  
+  min-height: calc(var(--board-size) / 1.5);
   display: grid !important;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr calc(var(--board-size) / 1.5) auto;
@@ -417,7 +421,7 @@ header span {
 .confirm-modal > *:nth-child(2) {
   width: auto !important;
   height: auto !important;
-  
+
 }
 .confirm-modal > div div {
   width: calc(var(--board-size) / 2);

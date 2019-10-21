@@ -1,7 +1,7 @@
 <template>
-  <div 
-    :style='addedToTraining ? { 
-      outline: `calc(var(--main-padding) / 4) solid ${mlLabel === 1 ? `#a44` : mlLabel === 0.5 ? `rgb(255, 200, 0)` : `rgb(114, 170, 82)`}` 
+  <div
+    :style='addedToTraining ? {
+      outline: `calc(var(--main-padding) / 4) solid ${mlLabel === 1 ? `#a44` : mlLabel === 0.5 ? `rgb(255, 200, 0)` : `rgb(114, 170, 82)`}`
     } : ``'
   >
 	<div :class="[selected ? `mini-board selected` : `mini-board`]"
@@ -43,7 +43,7 @@ export default {
 .mini-board {
   position: relative;
 	background: var(--cell-color);
-	color: var(--blank-color);	
+	color: var(--blank-color);
   width: 100%;
   height: 100%;
   display: grid;
@@ -71,7 +71,7 @@ export default {
 @media (orientation: landscape) {
 	@media (orientation: landscape) {
 		.mini-board {
-			
+
 		}
 	}
 }

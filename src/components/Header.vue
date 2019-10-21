@@ -13,19 +13,20 @@
 
 <script>
 import Button from './Button';
+
 export default {
-	name: 'Header',
-	components: {
-		Button
-	},
-	props: {
-		handleClickToBrowse: Function,
-		handleClickToSave: Function,
-		handleClickPrevious: Function,
-		handleClickNext: Function,
-		handleClickTrain: Function,
-		scanBoardForImage: Function
-	}
+  name: 'Header',
+  components: {
+    Button
+  },
+  props: {
+    handleClickToBrowse: Function,
+    handleClickToSave: Function,
+    handleClickPrevious: Function,
+    handleClickNext: Function,
+    handleClickTrain: Function,
+    scanBoardForImage: Function
+  }
 };
 </script>
 
@@ -49,15 +50,14 @@ h1 {
 }
 .button-area {
 	display: flex;
-	align-items: stretch;
+	align-items: center;
 	justify-content: space-between;
-	align-self: stretch;
-	/* width: calc(var(--header-height) * 2.5); */
-	padding: 0.2rem;
 }
 .button-area button {
-	flex-grow: 0.45;
-	padding: calc(var(--main-padding));
+	height: calc(var(--header-height)  - var(--main-padding));
+	padding: 0 calc(var(--main-padding) / 1.5);
+	margin: calc(var(--main-padding) / 8);
+	z-index: 0;
 }
 #save-button {
 	margin-right: calc(var(--main-padding) / 4);

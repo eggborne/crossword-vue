@@ -27,10 +27,10 @@ export default class GridScanner {
 		const startTime = window.performance.now();
 		this.net.train(ioArray, {
 			iterations: 20000, // the maximum times to iterate the training data --> number greater than 0
-			errorThresh: 0.01, // the acceptable error percentage from training data --> number between 0 and 1
+			errorThresh: 0.008, // the acceptable error percentage from training data --> number between 0 and 1
 			log: true, // true to use console.log, when a function is supplied it is used --> Either true or a function
-			logPeriod: 10, // iterations between logging out --> number greater than 0
-			learningRate: 0.2, // scales with delta to effect training rate --> number between 0 and 1
+			logPeriod: 5, // iterations between logging out --> number greater than 0
+			learningRate: 0.3, // scales with delta to effect training rate --> number between 0 and 1
 			momentum: 0.1, // scales with next layer's change value --> number between 0 and 1
 			callback: null, // a periodic call back that can be triggered while training --> null or function
 			callbackPeriod: 10, // the number of iterations through the training data between callback calls --> number greater than 0
@@ -42,14 +42,13 @@ export default class GridScanner {
 	getGridAttribute(grid, attribute) {
 		// console.warn('took in', grid);
 		const preparedGrid = this.getBinaryArray([...grid]);
-		const flippedGrid = this.getBinaryArray(this.getFlippedCellGrid([...grid]));	
-		
+		const flippedGrid = this.getBinaryArray(this.getFlippedCellGrid([...grid]));
+
 		const result = this.net.run(preparedGrid)[attribute];
 		const flippedResult = this.net.run(flippedGrid)[attribute];
 		const higherResult = flippedResult > result ? flippedResult : result;
 		// console.warn('orig', (result * 100).toFixed(1), 'flipped', (flippedResult * 100).toFixed(1));
 		return parseFloat((higherResult * 100).toFixed(1));
-		// return parseFloat((result * 100).toFixed(1));
 	}
 
 	getBinaryArray(grid) {
@@ -66,14 +65,14 @@ export default class GridScanner {
 	getRandomBinaryPattern() {
 		let binaryString = '';
 		for (let i = 0; i < 225; i++) {
-			binaryString += randomInt(0,1);
+			binaryString += randomInt(0, 1);
 		}
 		return binaryString;
 	}
 
 	getFlippedCellGrid(grid) {
 		const newGrid = [];
-		grid.forEach((row, r) => { 
+		grid.forEach((row, r) => {
 			newGrid[r] = [...row].reverse();
 		});
 		return newGrid;

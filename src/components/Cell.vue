@@ -1,10 +1,10 @@
 <template>
 	<div 
-    :class='[`cell`, selected && `selected`, shaded && `shaded`]'
+    :class='[`cell`, selected && `selected`, highlighted && `highlighted`, shaded && `shaded`]'
     v-on:pointerdown='handleClick'
   >
-    <div class='number'>{{ number }}</div>
-    <div class='letter'>{{ letter }}</div>
+    <div data-html2canvas-ignore class='number'>{{ number }}</div>
+    <div data-html2canvas-ignore class='letter'>{{ letter }}</div>
   </div>
 </template>
 
@@ -15,11 +15,15 @@ export default {
   props: {
     shaded: Boolean,
     selected: Boolean,
+    highlighted: Boolean,
     letter: '', 
     number: '',
     row: Number,
     column: Number,
     handleClick: Function
+  },
+  created() {
+
   }
 };
 
@@ -38,8 +42,18 @@ export default {
   height: var(--cell-height);
   max-height: var(--cell-height);
   padding: 0;
-  /* transition: background 210ms ease; */
   z-index: 1;
+}
+.cell:before {
+  content: '';
+  position: absolute;
+  width: inherit;
+  height: inherit;
+  background: rgba(0, 0, 255, 0.5);
+  display: none;
+}
+.cell.highlighted:before {
+  display: block;
 }
 .cell.selected {
   /* background: #00ff0099 !important; */

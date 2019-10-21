@@ -11,6 +11,7 @@
     "axios": "^0.19.0",
     "core-js": "^2.6.5",
     "html-to-image": "^0.1.1",
+    "html2canvas": "^1.0.0-rc.5",
     "register-service-worker": "^1.6.2",
     "vue": "^2.6.10",
     "vue-router": "^3.0.3",
@@ -25,8 +26,6 @@
     "babel-eslint": "^10.0.1",
     "eslint": "^5.16.0",
     "eslint-plugin-vue": "^5.0.0",
-    "sass": "^1.17.4",
-    "sass-loader": "^7.1.0",
     "vue-template-compiler": "^2.6.10"
   },
   "homepage": "https://crosswords.cc"
