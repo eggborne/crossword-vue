@@ -1,5 +1,5 @@
 <template>
-	<div class='load-spinner'>
+	<div class='load-spinner' :class='[direction === 1 && `clockwise`]'>
     <div></div>
     <div></div>
     <div></div>
@@ -13,15 +13,13 @@ export default {
   name: 'Spinner',
   props: {
     direction: Number // -1 or 1
-  },
-  created() {
-    document.documentElement.style.setProperty('--spin-direction', this.direction);
   }
 };
 </script>
 
 <style scoped>
 .load-spinner {
+  --spin-direction: -1;
   transform-origin: center;
 	background: var(--cell-color);
   width: calc((var(--header-height)));
@@ -40,12 +38,15 @@ export default {
 .load-spinner > div:nth-child(2), .load-spinner > div:nth-child(3) {
   background: var(--blank-color);
 }
+.clockwise {
+  --spin-direction: 1;
+}
 @keyframes spin {
   0% {
     transform: rotate(0) scale(1);
   }
   50% {
-    transform: rotate(calc(180deg * var(--spin-direction))) scale(1.2);
+    transform: rotate(calc(180deg * var(--spin-direction))) scale(1.3);
   }
   100% {
     transform: rotate(calc(360deg * var(--spin-direction))) scale(1);

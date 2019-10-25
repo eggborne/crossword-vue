@@ -2,24 +2,20 @@
 	<div class='mode-bar'>
     <div><div id='diagram-pane'
       class='mode-pane'
-      :class='editMode === `diagram` ? `selected` : ``'
-      @pointerdown='changeEditMode'
+      :class='$store.state.editMode === `diagram` ? `selected` : ``'
+      @pointerdown='() => $store.commit(`changeEditMode`, `diagram`)'
     >EDIT DIAGRAM</div></div>
     <div><div id='puzzle-pane'
       class='mode-pane'
-      :class='editMode === `puzzle` ? `selected` : ``'
-      @pointerdown='changeEditMode'
+      :class='$store.state.editMode === `puzzle` ? `selected` : ``'
+      @pointerdown='() => $store.commit(`changeEditMode`, `puzzle`)'
     >EDIT PUZZLE</div></div>
   </div>
 </template>
 
 <script>
 export default {
-  name: 'Spinner',
-  props: {
-    editMode: String,
-    changeEditMode: Function
-  }
+  name: 'Spinner',  
 };
 </script>
 
@@ -58,6 +54,6 @@ export default {
 }
 .mode-pane.selected {
   opacity: 1;
-  background: rgba(255, 166, 0, 0.326);
+  background: var(--pane-highlight-color);
 }
 </style>

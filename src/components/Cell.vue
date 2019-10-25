@@ -16,6 +16,7 @@ export default {
     shaded: Boolean,
     selected: Boolean,
     highlighted: Boolean,
+    violating: Boolean,
     letter: '', 
     number: '',
     row: Number,
@@ -33,7 +34,8 @@ export default {
 <style scoped>
 .cell {
 	position: relative;
-  outline: calc(var(--cell-width) / 24) solid var(--blank-color);  
+  /* outline: calc(var(--cell-width) / 24) solid var(--blank-color);   */
+  outline: 1px solid var(--blank-color);  
   display: flex;
   justify-content: center;
   align-items: center;
@@ -55,6 +57,9 @@ export default {
 .cell.highlighted:before {
   display: block;
 }
+/* .cell.violating {
+  background: rgba(255, 0, 0, 0.128);
+} */
 .cell.selected {
   /* background: #00ff0099 !important; */
   outline: calc(var(--cell-width) / 6) solid green;

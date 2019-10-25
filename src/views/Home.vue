@@ -11,20 +11,23 @@
       <Board
         :cellGrid='cellGrid'
         :handleCellClick='
-        editMode === `diagram` ? handleCellFlip :
-        editMode === `puzzle` ? handleCellSelect : null
+        $store.state.editMode === `diagram` ? handleCellFlip :
+        $store.state.editMode === `puzzle` ? handleCellSelect : null
         '
         :selectedCellIndex='selectedCellIndex'
+        :violatingCells='violatingCells'
       />
     </div>
     <ControlPanel
       :editMode='editMode'
       :options='options'
+      :busy='generating'
       :boardSize='boardSize'
       :symmetry='symmetry'
-      :percentBlack='getPercentBlack(cellGrid)'
+      :percentBlack='percentBlack'
+      :offensiveQuotient='offensiveQuotient'
       :wordsNeeded='wordsNeeded'
-      :contiguous='contiguous'
+      :isContiguous='contiguous'
       :changeEditMode='changeEditMode'
       :addCellLabels='addCellLabels'
       :adjustOption='adjustOption'
@@ -34,7 +37,9 @@
       :handleClickToSave='handleClickToSave'
       :handleClickToBrowse='handleClickToBrowse'
       :handleClickChooseDiagram='changeDiagram'
-      :swastikaQuotient='swastikaQuotient'
+      :handleClickGenerate='generateNewBoard'
+      :cancelGeneration='cancelGeneration'
+      :handleClickRules='() => getViolatingBoard(50, `offensive`, 50, 100)'
     />
     <div v-if='showingModal' id='dark-mask'></div>
     <SaveModal
@@ -58,43 +63,47 @@
     <!-- <canvas id='board-canvas'/> -->
     <!-- <img id='micro-board-image'/> -->
     <!-- <img id='crossword-image'/> -->
-    <MicroBoard v-if='this.currentDiagram'
+    <!-- <MicroBoard v-if='this.currentDiagram'
       :actualWidth='30'
       :actualHeight='30'
       :width='this.currentDiagram.width'
       :height='this.currentDiagram.height'
       :cellGrid='this.currentDiagram.cells'
-    />
+    /> -->
   </div>
 </template>
 
 <script>
-import Vue from 'vue';
+// import Vue from 'vue';
+import DB from '../api.js';
 import axios from 'axios';
 import Header from '@/components/Header.vue';
 import Board from '../components/Board.vue';
 import ControlPanel from '../components/ControlPanel.vue';
 import BrowseModal from '../components/BrowseModal.vue';
 import SaveModal from '../components/SaveModal.vue';
-import GridScanner from '../gridscanner';
 import BoardValidator from '../boardvalidator';
 import DiagramCreator from '../diagramcreator';
 import MicroBoard from '../components/MicroBoard.vue';
-// require('../gridscanner.js');
 
-let gridScanner;
+import GridScanner from '../gridscanner';
+
 const diagramCreator = new DiagramCreator();
 const boardValidator = new BoardValidator();
+const gridScanner = new GridScanner();
+
+require('../vkthread.min.js');
+
+// let validatorUrl = require('../boardvalidator.js')
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
 export default {
-  name: 'home',
+  name: 'Home',
   data: () => ({
     doneLoading: false,
-    gotMLData: false,
     editMode: 'diagram',
     selectedCellIndex: undefined,
     showingModal: undefined,
@@ -132,7 +141,7 @@ export default {
     },
     busySaving: false,
     savesPending: false,
-    swastikaQuotient: 0,
+    offensiveQuotient: 0,
     savedTrainingData: {
       input: [],
       output: [],
@@ -142,20 +151,29 @@ export default {
     saveMessage: '',
     auditList: [],
     auditMode: false,
-    rules: {
-      themeWords: 2,
-      wordLengths: {
-        min: 3,
-        max: 15
-      },
-      allChecked: true,
-      blackRate: 16
-    }
+    rules: {},
+    violatingCells: [],
+    onLayer: 0,
+    generating: false,
+    // worker: window.WEB_WORKER
   }),
+  computed: {
+    percentBlack() {
+      return this.cellGrid.length ? this.getPercentBlack(this.cellGrid) : 0;
+    }
+  },
   mounted() {
     this.createGrid(this.boardSize);
     this.addCellLabels();
-    this.doneLoading = true;    
+    this.getWordsNeeded();
+    this.doneLoading = true;
+    setTimeout(() => {
+      this.getMLData().then(() => {
+      console.error('Home.vue getMLData finished')      
+
+      });      
+    }, 200);
+    this.rules = this.$store.state.puzzleOptions.rules;
   },
   components: {
     Header,
@@ -166,21 +184,186 @@ export default {
     MicroBoard
   },
   methods: {
-    getMLData() {
-      return new Promise(async (resolve) => {
-        const modelJSONResponse = await this.getAIModel('swastika');
-        if (modelJSONResponse.data) {
-          console.log('getAIModel got', modelJSONResponse.data.length);
-          gridScanner.refreshModel(JSON.parse(modelJSONResponse.data));
-        }
-        const startTime = window.performance.now();
-        const trainingDataResponse = await this.getAITrainingData('swastika');
-        if (trainingDataResponse.data) {
-          console.log('getAITrainingData got', trainingDataResponse.data.length);
-          this.savedTrainingData = JSON.parse(trainingDataResponse.data);
-          console.error("got training data in", window.performance.now() - startTime);
-        }
-      });
+    getContiguous(grid) {
+      const validator = new BoardValidator();
+      const param = {
+        fn: validator.checkIfContiguous,
+        context: validator,
+        args: [grid, grid.flat()]
+      };
+      return vkthread.exec(param);
+    },
+    // sendWorkerForScore(grid) {      
+    //   const workerParams = {
+    //     fn: (grid, allCells, validator) => {
+    //       console.warn('WORKER GOT', grid, allCells, validator)
+    //       const getIntersectingWords = (grid, startingCell) => {
+            
+    //         for (let i = startingCell.column + 1; i < grid[0].length; i += 1) {
+    //           const cellIndex = grid[startingCell.row][i].index;
+    //           if (grid[startingCell.row][i].shaded) { break; }
+    //           if (!validator.visited.includes(cellIndex)) {
+    //             validator.visited.push(cellIndex);
+    //             // document.getElementById(`cell-${cellIndex}`).classList.add('highlighted');
+    //           }
+    //         }
+    //         for (let i = startingCell.column - 1; i >= 0; i -= 1) {
+    //           const cellIndex = grid[startingCell.row][i].index;
+    //           if (grid[startingCell.row][i].shaded) { break; }
+    //           if (!validator.visited.includes(cellIndex)) {
+    //             validator.visited.push(cellIndex);
+    //             // document.getElementById(`cell-${cellIndex}`).classList.add('highlighted');
+    //           }
+    //         }
+    //         for (let i = startingCell.row + 1; i < grid.length; i += 1) {
+    //           const cellIndex = grid[i][startingCell.column].index;
+    //           if (grid[i][startingCell.column].shaded) { break; }
+    //           if (!validator.visited.includes(cellIndex)) {
+    //             validator.visited.push(cellIndex);
+    //             // document.getElementById(`cell-${cellIndex}`).classList.add('highlighted');
+    //           }
+    //         }
+    //         for (let i = startingCell.row - 1; i >= 0; i -= 1) {
+    //           const cellIndex = grid[i][startingCell.column].index;
+    //           if (grid[i][startingCell.column].shaded) { break; }
+    //           if (!validator.visited.includes(cellIndex)) {
+    //             validator.visited.push(cellIndex);
+    //             // document.getElementById(`cell-${cellIndex}`).classList.add('highlighted');
+    //           }
+    //         }
+    //       };
+    //       const getNextCellIndex = (facingDirection, grid) => {
+    //         const currentIndex = validator.currentIndex;
+    //         let nextIndex;
+    //         if (facingDirection === 'north') {
+    //           nextIndex = currentIndex - grid[0].length;
+    //         }
+    //         if (facingDirection === 'east') {
+    //           nextIndex = currentIndex + 1;
+    //         }
+    //         if (facingDirection === 'south') {
+    //           nextIndex = currentIndex + grid[0].length;
+    //         }
+    //         if (facingDirection === 'west') {
+    //           nextIndex = currentIndex - 1;
+    //         }
+    //         return nextIndex;
+    //       }
+    //       const turn = (startingDirection, turnDirection) => {
+    //         const facingIndex = validator.directions.indexOf(startingDirection);
+    //         let newDirection;
+    //         if (turnDirection === 'left') {
+    //           newDirection = validator.directions[facingIndex - 1];
+    //           if (!newDirection) {
+    //             newDirection = validator.directions[validator.directions.length - 1];
+    //           }
+    //         }
+    //         if (turnDirection === 'right') {
+    //           newDirection = validator.directions[facingIndex + 1];
+    //           if (!newDirection) {
+    //             newDirection = validator.directions[0];
+    //           }
+    //         }
+    //         return newDirection;
+    //       }
+    //       validator.visited = [];
+    //       let sameIndexCount = 0;
+    //       const startingCell = allCells.filter(cell => cell.number == 1)[0];
+    //       console.log('startingCell', startingCell)
+    //       validator.currentIndex = (startingCell.row * grid.length) + (startingCell.column);
+    //       validator.visited.push(validator.currentIndex);
+    //       console.log(validator)
+    //       const startingIndex = validator.currentIndex;
+    //       let lastIndex = startingIndex;
+    //       const lockedCells = [];
+    //       console.warn(sameIndexCount)
+    //       console.warn(validator.currentIndex)
+    //       console.warn(startingIndex)
+    //         while (sameIndexCount < 5 && validator.currentIndex < startingIndex + grid[0].length) {
+    //         let reverseIndex = validator.directions.indexOf(validator.facing) - 2;
+    //         if (reverseIndex < 0) {
+    //           reverseIndex = validator.directions.indexOf(validator.facing) + 2;
+    //         }
+    //         const visitedAdjacentCells = [];
+    //         let nextIndex;
+    //         let nextFacingDirection;
+    //         const turnDirections = [
+    //           turn(validator.facing, 'left'),
+    //           validator.facing,
+    //           turn(validator.facing, 'right')
+    //         ];
+    //         const moves = [
+    //           getNextCellIndex(turn(validator.facing, 'left'),grid),
+    //           getNextCellIndex(validator.facing, grid),
+    //           getNextCellIndex(turn(validator.facing, 'right'), grid)
+    //         ];
+    //         for (let i = 0; i < 3; i += 1) {
+    //           if (!nextIndex) {
+    //             const cellIndex = moves[i];
+    //             if (cellIndex >= 0 && cellIndex < allCells.length) {
+    //               const cell = allCells[cellIndex];
+    //               const beyondLeftEdge = validator.currentIndex % grid[0].length === 0 && cellIndex === validator.currentIndex - 1;
+    //               const beyondRightEdge = validator.currentIndex % grid[0].length === grid[0].length - 1 && cellIndex === validator.currentIndex + 1;
+    //               const visited = validator.visited.includes(cellIndex);
+    //               const locked = lockedCells.includes(cellIndex);
+    //               if (!locked && !cell.shaded && !beyondLeftEdge && !beyondRightEdge) {
+    //                 nextIndex = cellIndex;
+    //                 if (!visited) {
+    //                   console.log('we nmoingf on')
+    //                   validator.visited.push(cellIndex);
+    //                 } else {
+    //                   visitedAdjacentCells.push(cellIndex);
+    //                 }
+    //                 nextFacingDirection = turnDirections[i];
+    //               }
+    //             }
+    //           }
+    //         }
+
+    //         if (nextIndex) {
+    //           lastIndex = validator.currentIndex;
+    //           validator.currentIndex = nextIndex;
+    //           getIntersectingWords(grid, allCells[nextIndex]);
+    //           validator.facing = nextFacingDirection;
+    //           if (lastIndex !== nextIndex) {
+    //             sameIndexCount = 0;
+    //           } else {
+    //             sameIndexCount += 1;
+    //           }
+    //         } else {
+    //           lockedCells.push(validator.currentIndex);
+    //           lastIndex = validator.currentIndex;
+    //           nextIndex = getNextCellIndex(validator.directions[reverseIndex], [...grid]);
+    //           validator.currentIndex = nextIndex;
+    //           validator.facing = validator.turn(validator.facing, 'right');
+    //         }
+    //       }
+    //       const nonWhites = allCells.filter(cell => !cell.shaded).length;
+    //       // let coveredAll = validator.visited.length;
+    //       let coveredAll = validator.visited.length === nonWhites;
+    //       for (let i = 0; i < 15; i += 1) {
+    //         if (!coveredAll) {
+    //           validator.visited.forEach(cellIndex => getIntersectingWords(grid, allCells[cellIndex]));
+    //           coveredAll = validator.visited.length === nonWhites;
+    //         }
+    //       }
+    //       // validator.visited.length = 0;
+    //       console.log('visited', validator.visited.length, 'nonWhites', nonWhites)
+	  //       return coveredAll;
+    //     },
+    //     args: [grid, grid.flat(), boardValidator],
+    //   };
+    //   return vkthread.exec(workerParams);
+    // },
+    async getMLData() {      
+      let modelData = await gridScanner.updateModel('offensive');
+      this.$store.dispatch('setLoaded', 'gotMLData');
+      const trainingData = await gridScanner.getTrainingData('offensive')
+      if (trainingData) {
+        this.savedTrainingData = trainingData;
+        this.$store.dispatch('setLoaded', 'gotMLTrainingData');
+      }
+      return;
     },
     getFlippedCellGrid(grid) {
 		  const newGrid = [];
@@ -190,7 +373,10 @@ export default {
       return newGrid;
     },
     getPercentBlack(cellGrid) {
-      const flatCells = cellGrid.flat();
+      let flatCells = cellGrid;
+      if (flatCells[0].length > 1) {
+        flatCells = flatCells.flat();
+      }
       const percent = Math.round((flatCells.filter(cell => cell.shaded).length / flatCells.length) * 100);
       return percent;
     },
@@ -207,7 +393,7 @@ export default {
       // const newData = this.savedTrainingData.input.filter(inp => inp.length === 225);
       // console.log(newData);
       // this.savedTrainingData = newData;
-      // this.saveAITrainingData('swastika', newData).then(resp => {
+      // DB.saveAITrainingData('offensive', newData).then(resp => {
       //   console.log('resp', resp)
       // })
       this.showingModal = 'save';
@@ -245,9 +431,9 @@ export default {
         };
       });
       ioArray = ioArray.filter(item => item.input.length === 225);
-      gridScanner = new GridScanner();
-      gridScanner.refreshModel();
-      gridScanner.trainScanner(ioArray);
+      // gridScanner = new GridScanner();
+      // gridScanner.refreshModel();
+      // gridScanner.trainScanner(ioArray);
       this.saveAIModelToDB();
     },
     async handleClickToLabel(diagramId, violation, violating) {
@@ -264,14 +450,14 @@ export default {
         };
 
         this.savedTrainingData = newTrainingData;
-        const trainingResponse = await this.saveAITrainingData('swastika', newTrainingData);
+        const trainingResponse = await DB.saveAITrainingData('offensive', newTrainingData);
         console.warn('handleClickToLabel > saveAITrainingData --->', trainingResponse);
       } else {
         console.error(diagramId, 'is ALREADY IN savedTrainingData');
       }
     },
     async refreshUserDiagrams() {
-      const resp = await this.getDiagrams();
+      const resp = await DB.getDiagrams();
       console.warn('resp', resp);
       const diagramArray = resp.data;
       diagramArray.map((diagramObj) => {
@@ -279,39 +465,39 @@ export default {
         diagramObj.width = parseInt(diagramObj.width);
         diagramObj.height = parseInt(diagramObj.height);
         diagramObj.percentBlack = 0;
-        const percent = gridScanner.getGridAttribute(diagramObj.cells, 'swastika');
-        diagramObj.swastikaPercent = percent;
+        const percent = gridScanner.getGridAttribute(diagramObj.cells, 'offensive');
+        diagramObj.offensivePercent = percent;
       });
       console.log('made', diagramArray);
       this.diagrams = diagramArray;
       return diagramArray;
     },
     async saveAIModelToDB() {
-      const modelString = JSON.stringify(gridScanner.net.toJSON());
-      document.getElementById('model-display').innerText = 'SAVING...';
-      document.getElementById('model-display').style.display = 'block';
-      this.busySaving = true;
-      const saveAIResponse = await this.saveAIModel('swastika', modelString);
-      console.warn('save AI responded', saveAIResponse.data);
-      this.busySaving = false;
-      document.getElementById('model-display').innerText = 'SAVED!';
-      document.getElementById('model-display').style.background = 'green';
-      setTimeout(() => {
-        document.getElementById('model-display').style.display = 'none';
-      }, 1000);
+      // const modelString = JSON.stringify(gridScanner.net.toJSON());
+      // document.getElementById('model-display').innerText = 'SAVING...';
+      // document.getElementById('model-display').style.display = 'block';
+      // this.busySaving = true;
+      // const saveAIResponse = await DB.saveAIModel('offensive', modelString);
+      // console.warn('save AI responded', saveAIResponse.data);
+      // this.busySaving = false;
+      // document.getElementById('model-display').innerText = 'SAVED!';
+      // document.getElementById('model-display').style.background = 'green';
+      // setTimeout(() => {
+      //   document.getElementById('model-display').style.display = 'none';
+      // }, 1000);
     },
     async handleSaveDiagram(creator) {
       if (!creator) {
         creator = 'Leroy';
       }
       const cellString = this.getStringifiedGridArray([...this.cellGrid]);
-      const uniqueResponse = await this.checkIfDiagramExists(cellString);
+      const uniqueResponse = await DB.checkIfDiagramExists(cellString);
       if (!uniqueResponse.data) {
         console.error('DIAGRAM IS UNIQUE!', uniqueResponse.data);
         const { width } = this.boardSize;
         const { height } = this.boardSize;
         this.saveMessage = `SAVING...`;
-        const saveResponse = await this.saveDiagram(cellString, width, height, creator);
+        const saveResponse = await DB.saveDiagram(cellString, width, height, creator);
         if (saveResponse.data) {
           console.error('saveDiagram ---->', saveResponse);
           this.saveMessage = `SAVED!`;
@@ -330,7 +516,7 @@ export default {
       }
     },
     async handleClickDeleteDiagram(id) {
-      const response = await this.removeDiagram(id);
+      const response = await DB.removeDiagram(id);
       if (response.data) {
         await this.refreshUserDiagrams();
       } else {
@@ -356,8 +542,9 @@ export default {
             shaded = false;
             letter = stringChar;
           }
+          let cellIndex = ((r * height) + c);
           grid[r][c] = {
-            row: r, column: c, letter, number: '', shaded,	selected: false
+            row: r, column: c, letter, number: '', shaded,	selected: false, index: cellIndex
           };
           cellsDone++;
         }
@@ -383,7 +570,6 @@ export default {
     },
     getWordsNeeded(cellGrid) {
       const grid = cellGrid ? [...cellGrid] : this.cellGrid;
-      // console.log('getWordsNeededr', cellGrid)
       const violations = [];
       const newWordsNeeded = {
         across: [],
@@ -392,38 +578,55 @@ export default {
       grid.forEach((row, r) => {
         row.forEach((cell, c) => {
           if (cell.number) {
+            const cellIndex = (r * grid.length) + c;
             cell.letter = '';
             const blankToLeft = c === 0 || row[c - 1].shaded;
             const blankAbove = r === 0 || grid[r - 1][c].shaded;
             let wordLengthToRight;
             let wordLengthBelow;
+            let acrossLetters = [cellIndex];
+            let downLetters = [cellIndex];
             if (blankToLeft) {
+              if (c === row.length - 1) {
+                wordLengthToRight = 1
+                // cell.letter += wordLengthToRight.toString();
+              }
               for (let k = c + 1; k < row.length; k++) {
-                const rowCell = row[k];
-                if (rowCell.shaded) {
+                const totalIndex = (r * grid.length) + k;
+                
+                if (row[k].shaded) {
                   wordLengthToRight = k - c;
                   // cell.letter = wordLengthToRight.toString();
                   break;
-                }
-                if (k === row.length - 1) {
-                  wordLengthToRight = k - c + 1;
-                  // cell.letter = wordLengthToRight.toString();
-                  break;
+                } else {
+                  acrossLetters.push(totalIndex);              
+                  if (k === row.length - 1) {
+                    wordLengthToRight = k - c + 1;
+                    // cell.letter = wordLengthToRight.toString();
+                    break;
+                  }
                 }
               }
             }
             if (blankAbove) {
+              if (r === grid.length - 1) {
+                wordLengthBelow = 1
+                // cell.letter += `/${wordLengthBelow.toString()}`;
+              }
               for (let h = r + 1; h < grid.length; h++) {
                 const gridRow = grid[h];
+                const totalIndex = (h * grid.length) + c;
                 if (gridRow[c].shaded) {
                   wordLengthBelow = h - r;
                   // cell.letter += `/${wordLengthBelow.toString()}`;
                   break;
-                }
-                if (h === grid.length - 1) {
-                  wordLengthBelow = h - r + 1;
-                  // cell.letter += `/${wordLengthBelow.toString()}`;
-                  break;
+                } else {
+                  downLetters.push(totalIndex);
+                  if (h === grid.length - 1) {
+                    wordLengthBelow = h - r + 1;
+                    // cell.letter += `/${wordLengthBelow.toString()}`;
+                    break;
+                  }
                 }
               }
             }
@@ -431,12 +634,14 @@ export default {
               newWordsNeeded.across.push({
                 number: cell.number,
                 word: '*'.repeat(wordLengthToRight),
+                letterIndexes: acrossLetters
               });
             }
             if (wordLengthBelow) {
               newWordsNeeded.down.push({
                 number: cell.number,
-                word: '*'.repeat(wordLengthBelow)
+                word: '*'.repeat(wordLengthBelow),
+                letterIndexes: downLetters
               });
             }
           } else if (cell.letter) {
@@ -449,118 +654,42 @@ export default {
       }
       return newWordsNeeded;
     },
-    getFullWordListOfLength(length) {
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/getwordlist.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        },
-        data: {
-          length
-        },
-      });
-    },
-    checkIfDiagramExists(cellString) {
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/checkifdiagramexists.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        },
-        data: {
-          cells: cellString
+    getViolatingCells(list, noDisplay, skipMax) {
+      let st = window.performance.now();
+      let violating = [];
+      let allChecked = this.$store.state.puzzleOptions.rules.allChecked;
+      list.across.forEach(wordObj => {
+        let tooShort = wordObj.word.length < this.rules.wordLengths.min;
+        let tooLong = !skipMax && wordObj.word.length > this.rules.wordLengths.max;
+        if (tooShort && !allChecked && wordObj.word.length === 1) {
+          // allow one-way 1-letter 'words' on unchecked boards
+          tooShort = false;
+        }
+        if (tooShort || tooLong) {
+          wordObj.letterIndexes.forEach(index => {
+            violating.push(index);
+          })
         }
       });
-    },
-    saveDiagram(cellString, width, height, creator) {
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/savediagram.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        },
-        data: {
-          cells: cellString,
-          width,
-          height,
-          creator,
+      list.down.forEach(wordObj => {
+        let tooShort = wordObj.word.length < this.rules.wordLengths.min;
+        let tooLong = !skipMax && wordObj.word.length > this.rules.wordLengths.max;
+        if (tooShort && !allChecked && wordObj.word.length === 1) {
+          tooShort = false;
+        }
+        if (tooShort || tooLong) {
+          wordObj.letterIndexes.forEach(index => {
+            violating.push(index);
+          })
         }
       });
+      if (!noDisplay) {
+        this.violatingCells = violating;
+      }
+      // console.warn('got violating cells in', window.performance.now() - st)
+      return violating;
     },
-    getAIModel(attribute) {
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/getaimodel.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        },
-        data: {
-          attribute
-        }
-      });
-    },
-    saveAIModel(attribute, model) {
-      console.log('sending', attribute, model.length);
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/saveaimodel.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        },
-        data: {
-          attribute,
-          model
-        }
-      });
-    },
-    saveAITrainingData(attribute, trainingData) {
-      trainingData = JSON.stringify(trainingData);
-      console.log('sending', attribute, trainingData.length);
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/saveaitrainingdata.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        },
-        data: {
-          trainingData
-        }
-      });
-    },
-    getAITrainingData(attribute) {
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/getaitrainingdata.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        },
-        data: {
-          attribute,
-        }
-      });
-    },
-    removeDiagram(id) {
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/removediagram.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        },
-        data: {
-          id: parseInt(id),
-        }
-      });
-    },
-    getDiagrams() {
-      return axios({
-        method: 'post',
-        url: 'https://api.eggborne.com/crossword/getdiagrams.php',
-        headers: {
-          'Content-type': 'application/x-www-form-urlencoded'
-        }
-      });
-    },
+    
     getWordList(length) {
       console.error('CALLING DB FOR', length, '-LETTER WORDS |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||');
       return new Promise((resolve) => {
@@ -578,19 +707,22 @@ export default {
     changeEditMode(e) {
       const newMode = e.target.id.split('-')[0];
       this.selectedCellIndex = undefined;
-      this.editMode = newMode;
+      console.warn('changing to', newMode)
+      this.$store.commit('changeEditMode', newMode)
+      // this.editMode = newMode;
     },
     changeDiagram(newDiagram) {
       this.showingModal = undefined;
       if (newDiagram.width !== this.boardSize.width || newDiagram.height !== this.boardSize.height) {
         this.adjustOption('diagramSize', newDiagram.width);
-        // document.getElementById('diagram-slider').value = newDiagram.width;
       }
-      this.currentDiagram = newDiagram;
-      this.cellGrid = newDiagram.cells;
-      this.swastikaQuotient = gridScanner.getGridAttribute(newDiagram.cells, 'swastika');
-      this.addCellLabels();
-      this.getWordsNeeded();
+      this.cellGrid = newDiagram.cells;      
+      requestIdleCallback(() => {
+        // this.currentDiagram = newDiagram;
+        this.addCellLabels();
+        this.violatingCells = this.getViolatingCells(this.getWordsNeeded());
+        this.offensiveQuotient = gridScanner.getGridAttribute(newDiagram.cells, 'offensive');
+      });
     },
     handleClickCancelModal() {
       this.showingModal = undefined;
@@ -620,8 +752,10 @@ export default {
       for (let r = 0; r < height; r++) {
         grid[r] = [];
         for (let c = 0; c < width; c++) {
+          let cellIndex = ((r * height) + c);
           grid[r][c] = {
-            row: r, column: c, letter: '', number: '', shaded: false,	selected: false
+            row: r, column: c, letter: '', number: '', shaded: false,	selected: false,
+            index: cellIndex
           };
         }
       }
@@ -663,26 +797,17 @@ export default {
         const mirrorCell = newCellGrid[coords.row][coords.column];
         mirrorCell.shaded = newShadedStatus;
       });
-      requestAnimationFrame(() => {
+      requestIdleCallback(() => {
         this.addCellLabels();
-        this.getWordsNeeded();
-        if (!this.gotMLData) {
-          gridScanner = new GridScanner();
-          setTimeout(() => {
-            this.gotMLData = true;
-            this.getMLData().then((response) => {
-              console.log('getMLData findihed!');
-              this.swastikaQuotient = gridScanner.getGridAttribute(newCellGrid, 'swastika');
-              // let testGrid = diagramCreator.analyzeImage('board-image').join('');
-              // console.warn('made grid', testGrid)
-              // testGrid = this.buildArrayFromGridString(testGrid, 15, 15);
-              // console.warn('made grid', testGrid);
-              // this.cellGrid = testGrid;
-            });
-          }, 500);
-        } else {
-          this.swastikaQuotient = gridScanner.getGridAttribute(newCellGrid, 'swastika');
-        }
+        let needed = this.getWordsNeeded();
+        this.violatingCells = this.getViolatingCells(needed);
+        const startTime = window.performance.now();
+        // this.contiguous = boardValidator.checkIfContiguous(newCellGrid, newCellGrid.flat());
+        this.getContiguous(newCellGrid).then((contiguous) => {
+          this.contiguous = contiguous;
+          console.warn('worker for getContiguous took', window.performance.now() - startTime);
+          this.offensiveQuotient = gridScanner.getGridAttribute(newCellGrid, 'offensive');
+        });
       });
     },
     handleCellSelect(e) {
@@ -692,7 +817,7 @@ export default {
       }
     },
     addCellLabels(cellGrid) {
-      let grid = cellGrid ? [...cellGrid] : [...this.cellGrid];
+      let grid = cellGrid ? JSON.parse(JSON.stringify(cellGrid)) : JSON.parse(JSON.stringify([...this.cellGrid]));
       const start = window.performance.now();
       const updatedCells = grid;
       const totalCells = updatedCells.flat().length;
@@ -737,45 +862,45 @@ export default {
         document.documentElement.style.setProperty(optionData.cssVar, `${newValue}${optionData.cssUnit}   `);
         document.documentElement.style.setProperty('--cells-high', `${newValue}${optionData.cssUnit}`);
         console.error('board resized in', window.performance.now() - startTime);
-        this.swastikaQuotient = 0;
+        this.offensiveQuotient = 0;
       }
     },
     adjustRangedOption(optionName, newValue) {
+      console.warn('got', optionName, newValue);
+      if (optionName === 'blackRate') {
+        this.rules.blackRate = parseInt(newValue);
+      }
       const optionData = this.options[optionName];
     },    
     getRandomDiagram(iterations) {
       const newDiagram = {};
       const offensiveScores = [];
       for (let i = 0; i < iterations; i++) {
-        const randomPattern = this.getRandomBinaryPattern(this.rules.blackRate + 10);
+        const randomPattern = this.getRandomBinaryPattern(this.rules.blackRate);
         const newGrid = this.buildArrayFromGridString(randomPattern, this.boardSize.width, this.boardSize.height);
-        const offensiveScore = gridScanner.getGridAttribute(newGrid, 'swastika');
+        const offensiveScore = gridScanner.getGridAttribute(newGrid, 'offensive');
         offensiveScores.push({ grid: newGrid, score: offensiveScore });
       }
-      let sortedScores = offensiveScores.filter(scoreSet => scoreSet.score < 10);
-      console.log('got the', sortedScores);
-      sortedScores.forEach(scoreSet => {
+      let sortedScores = offensiveScores.filter(scoreSet => scoreSet.score < 20);
+      sortedScores.forEach((scoreSet, i) => {
         scoreSet.grid = this.addCellLabels(scoreSet.grid);
         let needed = this.getWordsNeeded(scoreSet.grid);
         scoreSet.wordsNeeded = needed;
         let wordList = [...needed.across, ...needed.down];
-        console.log('has list', wordList)
         let sortedList = wordList.sort((a, b) => a.word.length - b.word.length);
         let shortest = sortedList[0];
         let longest = sortedList[sortedList.length - 1];
-        console.log('shortest', shortest)
-        console.log('longest', longest)
         let blackness = this.getPercentBlack(scoreSet.grid);
-        console.warn('blackness', blackness)
         if (
           shortest.word.length < this.rules.wordLengths.min 
           || longest.word.length > this.rules.wordLengths.max
-          || blackness < this.rules.blackRate
+          || (blackness < this.rules.blackRate - 3 || blackness > this.rules.blackRate + 3)
         ) {
-          console.log('rejecting for', blackness, shortest, longest)
+          console.log('random diagram', i, 'rejected for', blackness, shortest.word.length, longest.word.length)
           scoreSet.rejected = true;
         }
       });
+      let sample = sortedScores[0].grid;
       sortedScores = sortedScores.filter(scoreSet => !scoreSet.rejected);
       console.warn('filtered score list is', sortedScores.length, sortedScores);
       let newAuditList = [];
@@ -785,97 +910,311 @@ export default {
         diagramObj.width = this.boardSize.width;
         diagramObj.height = this.boardSize.height;
         diagramObj.percentBlack = 0;
-        diagramObj.swastikaPercent = scoreSet.score;
+        diagramObj.offensivePercent = scoreSet.score;
         // console.log('puishing diagramObj', diagramObj)
         newAuditList.push(diagramObj);
       });
       if (sortedScores.length) {
         this.auditList = newAuditList;
-        return sortedScores[0];
+        this.cellGrid = sortedScores[0].grid;
       } else {
+        this.cellGrid = sample;
+        requestAnimationFrame(() => {
+          let needed = this.getWordsNeeded(sample);
+          this.violatingCells = this.getViolatingCells(needed);
+        })
         // this.getRandomDiagram(iterations / 2)
       }
     },
+    getIntermediateDiagram() {
+      let newGrid = this.generateLayer(this.cellGrid);
+      // this.cellGrid = newGrid;
+      return newGrid;
+    },
+    cancelGeneration() {
+      if (this.generating) {
+        this.generating = false;
+        this.onLayer = 0;
+        
+      }
+    },
+    generateNewBoard(instant) {
+      let genStart = window.performance.now();
+      let canceled = false;
+      // this.clearBoard();
+      this.generating = true;
+      this.blackness = 0;
+      this.previousBlackness;
+      let newGrid;
+      // let timeout = this.rules.blackRate * 3 * (3 - this.symmetry)
+      let timeout = 300;
+      this.count = 0;
+      this.redundant = 0;
+      this.growBoard = (baseGrid) => {
+        this.count++
+        const grid = this.generateLayer(baseGrid);
+        this.previousBlackness = this.blackness;
+        this.blackness = this.getPercentBlack(grid);  
+        this.cellGrid = grid;
+        let tooRedundant = this.redundant >= timeout;
+        let timedOut = this.count >= timeout;
+        let needsBlack = this.blackness < this.rules.blackRate;
+        if (this.generating && !tooRedundant && !timedOut && needsBlack) {
+          if (this.blackness !== this.previousBlackness) {
+            requestAnimationFrame(() => {
+              this.growBoard(grid)
+            });
+          } else {
+            this.redundant++
+            requestIdleCallback(() => {
+              this.growBoard(grid)
+            });
+          }
+        } else {
+          if (!this.generating) {
+            canceled = true;
+            console.error('CANCELED ----------------')
+          }
+          console.warn('board generated in', (window.performance.now() - genStart).toFixed(2));
+          console.warn('count was', this.count);
+          console.warn('redundant was', this.redundant);
+          requestAnimationFrame(async () => {
+            newGrid = this.addCellLabels(grid);
+            console.log('we final', newGrid)
+            let needed = this.getWordsNeeded(newGrid);
+            this.wordsNeeded = needed;
+            this.violatingCells = this.getViolatingCells(needed);
+            let contiguous = await this.getContiguous(newGrid);
+            console.log('got cont?', contiguous)
+            this.contiguous = contiguous;
+            this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');            
+            this.generating = false;              
+            this.cellGrid = newGrid;
+            this.onLayer = 0;
+            console.error('stopped at timedOut', timedOut);
+            console.error('stopped at tooRedundant', tooRedundant);
+            console.error('stopped at needsBlack', needsBlack);
+            console.error('stopped at canceled', canceled);
+          });
+          return grid;
+        }
+      }
+      if (instant === true) {
+        // while (count < timeout && blackness < this.rules.blackRate) {
+        //   requestIdleCallback(() => {
+        //     newGrid = this.generateLayer();       
+        //     this.cellGrid = newGrid;
+        //     count++
+        //     blackness = this.getPercentBlack(newGrid);            
+        //   })
+        // }
+        // newGrid = this.addCellLabels(newGrid);
+        // this.cellGrid = newGrid;
+        // requestAnimationFrame(() => {
+        //   let needed = this.getWordsNeeded(newGrid);
+        //   this.wordsNeeded = needed;
+        //   this.violatingCells = this.getViolatingCells(needed);
+        //   this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
+        //   // this.contiguous = boardValidator.checkIfContiguous(newGrid)
+        //   this.getContiguous(newGrid).then((contiguous) => {
+        //     this.contiguous = contiguous;
+        //     this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
+        //   });
+        //   this.onLayer = 0;
+        //   console.error('stopped at blackness, count', blackness, count);
+        //   this.generating = false;
+        // });
+      } else {  
+        this.growBoard(this.cellGrid);
+        // let newGrid = this.cellGrid;
+      }
+    },
+    generateLayer(baseLayer) {
+      let newGrid = JSON.parse(JSON.stringify(baseLayer));
+      let limits = this.symmetry ? {
+        min: 0,
+        max: Math.floor(this.boardSize.width / this.symmetry)
+        // max: Math.floor(this.boardSize.width / 2)
+      } : {
+        min: 0,
+        max: this.boardSize.width
+      }
+
+      let choices = newGrid[this.onLayer].slice(limits.min, limits.max);
+      let unshaded = choices.filter(cell => !cell.shaded);
+      let violating = [];
+      let validOptions = [];
+      unshaded.forEach((cell, i) => {
+        let selectedCell = unshaded[i];
+        if (!newGrid[this.onLayer][i].shaded) {
+          let previousShaded = newGrid[this.onLayer][i].shaded;
+          newGrid[this.onLayer][i].shaded = true;
+          const mirrorCoords = this.getMirrorCoords(this.symmetry, {
+            row: selectedCell.row,
+            column: selectedCell.column
+          });
+          mirrorCoords.forEach((coordSet) => {
+            const cellIndex = (coordSet.row * this.boardSize.height) + coordSet.column;
+            newGrid[coordSet.row][coordSet.column].previousShaded = newGrid[coordSet.row][coordSet.column].shaded;
+            newGrid[coordSet.row][coordSet.column].shaded = true;
+          });
+          newGrid = this.addCellLabels(newGrid);
+          let needed = this.getWordsNeeded(newGrid);
+          newGrid.forEach(row => { row = row.map(cell => cell.number = '') })
+          violating = this.getViolatingCells(needed, true, true);
+          let offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
+          // let contiguous = boardValidator.checkIfContiguous(newGrid, newGrid.flat());
+          if (!violating.length) {
+            if (offensiveQuotient < 50) {
+              // if (this.rules.contiguous && contiguous || !this.rules.contiguous) {
+                validOptions.push(selectedCell.column);
+              // } else {
+                // console.error('rejected for non-contiguous');
+              // }
+            } else {
+              console.error('rejected for offensive');
+            }
+          }
+          newGrid[this.onLayer][i].shaded = previousShaded;
+          mirrorCoords.forEach((coordSet) => {
+            // const cellIndex = (coordSet.row * this.boardSize.height) + coordSet.column;
+            newGrid[coordSet.row][coordSet.column].shaded = newGrid[coordSet.row][coordSet.column].previousShaded;            
+          });          
+          violating = [];
+        }
+      });
+      let advanceAmount = randomInt(0,2);
+      if (!validOptions.length) {
+        advanceAmount = 1;
+      } else {
+        let randomIndex = randomInt(0, validOptions.length - 1);
+        let cellToShade = validOptions[randomIndex];
+        newGrid[this.onLayer][cellToShade].shaded = true;
+        const mirrorCoords = this.getMirrorCoords(this.symmetry, {
+            row: this.onLayer,
+            column: cellToShade
+          });
+        mirrorCoords.forEach((coordSet) => {
+          const cellIndex = (coordSet.row * this.boardSize.height) + coordSet.column;
+          newGrid[coordSet.row][coordSet.column].shaded = true;
+        });
+        validOptions = [];        
+      }
+      // this.onLayer = this.onLayer - 1;
+      // if (this.onLayer < 0) {
+      //   this.onLayer = limits.max;
+      // }
+      this.onLayer = this.onLayer + advanceAmount;
+      if (this.onLayer > limits.max - 1) {
+        this.onLayer = 0;
+      }
+      return newGrid;
+    },
     getViolatingBoard(iterations, feature, minScore, maxScore) {
+      let st = window.performance.now();
       const offensiveScores = [];
       const newAuditList = [];
-      for (let i = 0; i < iterations; i++) {
-        // let randomPattern = this.getRandomBinaryPattern(randomInt(10,30));
-        const randomPattern = this.getRandomBinaryPattern(this.rules.blackRate);
-        const newGrid = this.buildArrayFromGridString(randomPattern, this.boardSize.width, this.boardSize.height);
-        const gridScore = gridScanner.getGridAttribute(newGrid, feature);
-        offensiveScores.push({ grid: newGrid, score: gridScore });
-      }
-      const sortedScores = offensiveScores.filter(scoreSet => scoreSet.score >= minScore && scoreSet.score <= maxScore);
-      // const sortedScores = offensiveScores.sort((a, b) => b.score - a.score);
-      sortedScores.forEach((scoreSet, i) => {
-        const diagramObj = {};
-        diagramObj.cells = scoreSet.grid;
-        diagramObj.width = this.boardSize.width;
-        diagramObj.height = this.boardSize.height;
-        diagramObj.percentBlack = 0;
-        diagramObj.swastikaPercent = scoreSet.score;
-        // console.log('puishing diagramObj', diagramObj)
-        newAuditList.push(diagramObj);
-      });      
-      // const reversedScores = [...sortedScores].reverse();
-      // for (let i = 0; i < 10; i++) {
-      //   const diagramObj = {};
-      //   diagramObj.cells = reversedScores[i].grid;
-      //   diagramObj.width = this.boardSize.width;
-      //   diagramObj.height = this.boardSize.height;
-      //   diagramObj.percentBlack = 0;
-      //   diagramObj.swastikaPercent = reversedScores[i].score;
-      //   // console.log('puishing diagramObj', diagramObj)
-      //   newAuditList.push(diagramObj);
-      // }
-      const topScorer = sortedScores[0];
-      // console.log('topScorer', topScorer);
-      this.cellGrid = topScorer.grid;
-      this.swastikaQuotient = topScorer.score;
-      // console.log('list is', newAuditList.length, newAuditList);
-      this.auditList = newAuditList;
+      this.generating = true;
+      let sortedScores = [];
+      requestIdleCallback(() => {
+        // for (let i = 0; i < iterations; i++) {
+          while (this.generating && !sortedScores.length) {
+            const randomPattern = this.getRandomBinaryPattern(this.rules.blackRate);
+            const newGrid = this.buildArrayFromGridString(randomPattern, this.boardSize.width, this.boardSize.height);
+            const gridScore = gridScanner.getGridAttribute(newGrid, feature);
+            // console.warn('we at randomPattern', randomPattern)
+            // console.warn('we at newGrid', newGrid)
+            // console.warn('we at gridScore', gridScore)
+            offensiveScores.push({ grid: newGrid, score: gridScore });
+            sortedScores = offensiveScores.filter(scoreSet => scoreSet.score >= minScore && scoreSet.score <= maxScore);
+            requestIdleCallback(() => {
+              this.cellGrid = newGrid;
+            });          
+          }
+        console.log('we got offensive?', sortedScores.length);
+
+        // const sortedScores = offensiveScores.sort((a, b) => b.score - a.score);
+        sortedScores.forEach((scoreSet, i) => {
+          const diagramObj = {};
+          diagramObj.cells = scoreSet.grid;
+          diagramObj.width = this.boardSize.width;
+          diagramObj.height = this.boardSize.height;
+          diagramObj.percentBlack = 0;
+          diagramObj.offensivePercent = scoreSet.score;
+          // console.log('puishing diagramObj', diagramObj)
+          newAuditList.push(diagramObj);
+        });      
+        // const reversedScores = [...sortedScores].reverse();
+        // for (let i = 0; i < 10; i++) {
+        //   const diagramObj = {};
+        //   diagramObj.cells = reversedScores[i].grid;
+        //   diagramObj.width = this.boardSize.width;
+        //   diagramObj.height = this.boardSize.height;
+        //   diagramObj.percentBlack = 0;
+        //   diagramObj.offensivePercent = reversedScores[i].score;
+        //   // console.log('puishing diagramObj', diagramObj)
+        //   newAuditList.push(diagramObj);
+        // }
+        const topScorer = sortedScores[0];
+        this.offensiveQuotient = topScorer.score;
+        let newGrid = this.addCellLabels(topScorer.grid)
+        let needed = this.getWordsNeeded(newGrid);
+        this.violatingCells = this.getViolatingCells(needed);
+        this.cellGrid = newGrid;
+        this.auditList = newAuditList;
+        console.warn('screened', iterations, 'grids in', window.performance.now() - st);
+        console.warn('compiled', this.auditList.length, 'samples');
+        this.generating = false;
+      });
     },
     getRandomBoard(blackPercent) {
 
     },
     clearBoard(e, shade) {
-      // this.auditMode = !this.auditMode;
-      // e.target.classList.toggle('highlighted');
-
-      const updatedCells = [...this.cellGrid];
-      [...updatedCells].forEach((row, r, rowsArray) => {
-        updatedCells[r] = row.map((cell, c, cellArray) => {
-          const newCell = { ...cell };
-          newCell.letter = '';
-          newCell.number = '';
-          newCell.shaded = shade;
-          newCell.selected = false;
-          return cell = newCell;
+      if (e && this.generating) {
+        this.cancelGeneration();
+        setTimeout(() => {
+          this.clearBoard();
+        }, 500)
+      } else {
+        // this.auditMode = !this.auditMode;
+        // e.target.classList.toggle('highlighted');
+        const updatedCells = [...this.cellGrid];
+        updatedCells.forEach((row, r, rowsArray) => {
+          updatedCells[r] = row.map((cell, c, cellArray) => {
+            const newCell = { ...cell };
+            newCell.letter = '';
+            newCell.number = '';
+            newCell.shaded = shade;
+            newCell.selected = false;          
+            newCell.highlighted = false;
+            document.getElementById(`cell-${newCell.index}`).classList.remove('highlighted');       
+            return cell = newCell;
+          });
         });
-      });
-      this.cellGrid = updatedCells;
-      this.addCellLabels();
-      this.swastikaQuotient = 0;
+        this.cellGrid = updatedCells;
+        this.addCellLabels();
+        this.getWordsNeeded();
+        this.violatingCells = [];
+        this.contiguous = true;
+        this.offensiveQuotient = 0;
+      }
     },
     shadeBoard(e) {
       // let cwIndex = randomInt(0, crosswordImages.length);
       // this.extractPuzzleFromImage(crosswordImages[cwIndex], 15, 15);
-
-      // boardValidator.perimeterScanner.checkIfContiguous(this.cellGrid);
-      // boardValidator.perimeterScanner.floodFill(this.cellGrid);
 
       // let rando = this.getRandomDiagram(500);
       // console.log('rando', rando);
       // if (rando) {
       //   this.cellGrid = rando.grid;
       // }
-      // this.getViolatingBoard(1000, 'swastika', 80, 100);
+      // this.getViolatingBoard(1000, 'offensive', 80, 100);
 
       // let cellString = this.getBinaryPattern([...this.cellGrid]);
       // let newGrid = this.buildArrayFromGridString()
       
-      this.clearBoard(e, true);
+      // this.clearBoard(e, true);
     },
     extractPuzzleFromImage(url, width, height) {
       const crosswordImage = document.getElementById('crossword-image');
@@ -946,9 +1285,11 @@ export default {
       // });
     }
   },
-  validateWordLengths(grid) {
-    
-  }
+  // getIntersectingWords(startingCell) {
+  //   for (let i=startingCell.column + 1; i < this.boardSize.width; i++) {
+  //     this.violatingCells.push(this.gridCells[startingCell.row][i])
+  //   }
+  // }
 };
 </script>
 
@@ -993,6 +1334,7 @@ export default {
 .home {
   min-height: var(--view-height);
   max-height: var(--view-height);
+  min-width: 100vw;
   display: grid;
   grid-template-rows:
     var(--header-height)
@@ -1000,7 +1342,7 @@ export default {
     1fr
     /* var(--footer-height) */
   ;
-  /* overflow-y: auto; */
+  /* overflow-y: auto; */  
 }
 #board-canvas {
   position: absolute;
@@ -1023,6 +1365,8 @@ export default {
 }
 .board-area {
 	height: 100%;
+  /* width: 100%; */
+  align-self: flex-start;
 	display: flex;
 	flex-direction: column;
 	align-items: center;

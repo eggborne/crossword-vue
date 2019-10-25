@@ -1,17 +1,17 @@
 <template>
-	<div id="slider-container">
-		<div class="slider-label">{{ boardSize.width }} x {{ boardSize.height }}</div>
+	<!-- <div class="slider-container"> -->
+		<!-- <div class="slider-label">{{ currentValue }}</div> -->
 		<input
 			id='diagram-slider'
 			v-on:input="handleChangeSliderValue"
 			v-model="currentValue"
 			:label="option.name"
 			type="range"
+			:min="option.min"
+			:max="option.max"
 			:step="option.step"
-			:min="option.minValue"
-			:max="option.maxValue"
 		/>
-	</div>
+	<!-- </div> -->
 </template>
 
 <script>
@@ -22,7 +22,6 @@ export default {
     lastChanged: 0
   }),
   props: {
-    boardSize: Object,
     rangeValue: Number,
     option: Object,
     adjustRangedOption: Function
@@ -39,15 +38,15 @@ export default {
 </script>
 
 <style scoped>
-#slider-container {
-	grid-column-end: span 2;
-	width: 100%;
+.slider-container {
+	/* grid-column-end: span 2; */
+	/* width: 100%;
 	display: flex;
-	align-items: center;
+	align-items: center; */
 }
 .slider-label {
-  /* height: 100%; */
-  /* flex-grow: 1; */
+  height: 100%;
+  flex-grow: 1;
   width: calc(var(--header-height) * 1.5);
   padding-right: calc(var(--main-padding) / 2);
   display: flex;
@@ -58,16 +57,17 @@ export default {
 		2px 1px 0 #00000088;
 }
 input[type='range'] {
+	
 	position: relative;
 	-webkit-appearance: none; /* Override default CSS styles */
 	appearance: none;
-	flex-grow: 1;
+	/* flex-grow: 1; */
 	height: calc(var(--main-padding) / 1.5);
 	border: 1px solid var(--cell-color);
 	border-radius: var(--main-padding);
-	background: transparent;
+	/* background: transparent; */
 	outline: none;
-	opacity: 0.75;
+	/* opacity: 0.75; */
 }
 input::-webkit-slider-thumb {
 	border-radius: 50%;
@@ -101,15 +101,15 @@ input::-moz-range-thumb {
 	align-content: center;
 	padding-top: calc(var(--main-padding) / 2);
 	padding-bottom: calc(var(--main-padding) / 2);
-	background: transparent;
+	/* background: transparent; */
 }
 #option-list .range:first-of-type {
-	margin-top: calc(var(--main-padding));
+	/* margin-top: calc(var(--main-padding)); */
 }
 div:first-child {
-	justify-self: start;
+	/* justify-self: start; */
 }
 input {
-	grid-column-end: span 2;
+	/* grid-column-end: span 2; */
 }
 </style>

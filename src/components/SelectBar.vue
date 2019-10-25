@@ -51,6 +51,9 @@ export default {
 	/* max-width: 100%; */
 	flex-grow: 1;
 }
+.select-bar button {
+	flex-grow: 1;
+}
 .select-bar button:last-of-type {
   border-top-right-radius: calc(var(--main-padding) / 3);
   border-bottom-right-radius: calc(var(--main-padding) / 3);

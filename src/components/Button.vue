@@ -1,5 +1,5 @@
 <template>
-	<button @pointerdown='handleClick'>
+	<button @pointerdown='handleClick' :class='highlighted ? `highlighted` : ``'>
 		{{ label.toUpperCase() }}
 	</button>
 </template>
@@ -9,6 +9,7 @@ export default {
   name: 'Button',
   props: {
     label: String,
+    highlighted: Boolean,
     clickType: String,
     handleClick: Function
   }
@@ -31,8 +32,16 @@ button {
 	text-shadow: -1px -1px 0 #00000088, 1px -1px 0 #00000088, -1px 1px 0 #00000088,
 		2px 1px 0 #00000088;
 }
+button.highlighted {
+  background-color: var(--button-on-color);
+}
 button:active {
   background-color: var(--button-on-color);
+}
+button.disabled {
+  pointer-events: none;
+  background: gray !important;
+  opacity: 0.5;
 }
 .highlighted {
 	background-color: orange;

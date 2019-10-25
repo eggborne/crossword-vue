@@ -1,13 +1,13 @@
 <template>
 <div class='button-menu'>
-  <Button :label='`${label} ${displayValue}`' :handleClick='toggleOpen' />
-  <div class='button-menu-options' :class='isOpen ? `open` : ``'>
+  <Button :label='`${label} ${displayValue}`' :handleClick='toggleOpen' :highlighted='isOpen' />
+  <div class='button-menu-options' :class='[isOpen && `open`, option.name && `two-column`]'>
 	  <Button 
       v-for='(selection, i) in selections'
-      v-bind:key='i'
+      v-bind:key='i'      
       :label="selection.labelText" 
       :handleClick="() => { toggleOpen(); handler(option.name, selection.valueAmount);}"
-      :class='currentValue === selection.valueAmount && `selected`'
+      :class='[currentValue === selection.valueAmount && `selected`, selection.labelText.toUpperCase() === `OFF` && `wide`]'
     />
 
 
@@ -22,12 +22,12 @@ export default {
   data: () => ({
     isOpen: false,
     displayValues: {
-      13: '13x13',
-      15: '15x15',
-      17: '17x17',
-      19: '19x19',
-      21: '21x21',
-      23: '23x23',
+      13: '13',
+      15: '15',
+      17: '17',
+      19: '19',
+      21: '21',
+      23: '23',
       0: 'OFF',
       1: '2X',
       2: '4X'
@@ -59,14 +59,16 @@ export default {
 <style scoped>
 .button-menu {
   position: relative;
-  /* width: min-content; */
+  height: 100%;
+  max-height: calc(var(--header-height));
 }
 .button-menu > button {
   height: 100%;
+  min-width: 100%;
   padding: 0 var(--main-padding);
 }
 .button-menu button.selected {
-  background: blue !important;
+  background: var(--button-selected-color);
 }
 .button-menu-options {
   position: absolute;
@@ -76,13 +78,21 @@ export default {
   transform-origin: bottom;
   transition: transform 210ms ease, opacity 210ms ease;
 }
+.button-menu-options.two-column {
+  display: grid;
+  /* grid-template-columns: 1fr 1fr; */
+  grid-template-columns: 1fr 1fr;
+  grid-auto-flow: row;
+}
 .button-menu-options:not(.open) {
   opacity: 0;
   transform: scaleY(0);
   pointer-events: none;
 }
 .button-menu-options > button {
-  padding: calc(var(--main-padding) / 2);
-  width: 100%;
+  padding: calc(var(--main-padding) / 1.5);
+}
+.button-menu-options > button.wide {
+  grid-column-end: span 2;
 }
 </style>

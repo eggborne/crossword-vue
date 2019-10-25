@@ -17,7 +17,7 @@
 		></div>
 	</div>
   <div class='added-message'>
-    {{ swastikaPercent }}%
+    {{ offensivePercent }}%
   </div>
   </div>
 </template>
@@ -33,7 +33,7 @@ export default {
     selected: Boolean,
     addedToTraining: Boolean,
     mlLabel: Number,
-    swastikaPercent: Number,
+    offensivePercent: Number,
     onClickDiagram: Function
   }
 };

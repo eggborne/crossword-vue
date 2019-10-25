@@ -1,23 +1,26 @@
 <template>
-	<header>
-		<h1>Crosswords<span style='color: #ccc' >.cc</span></h1>
+	<header id='page-header'>
+		<h1>Crosswords<span style='opacity: 0.75' >.cc</span></h1>
 		<div class="button-area">
 			<!-- <Button :label="`TRAIN`" :handleClick="handleClickTrain" /> -->
 			<Button id='save-button' :label="`SAVE`" :handleClick="handleClickToSave" />
-			<Button :label="`<`" :handleClick="handleClickPrevious" />
+			<!-- <Button :label="`<`" :handleClick="handleClickPrevious" /> -->
 			<Button :label="`BROWSE`" :handleClick="handleClickToBrowse" />
-			<Button :label="`>`" :handleClick="handleClickNext" />
+			<!-- <Button :label="`>`" :handleClick="handleClickNext" /> -->
+			<SettingsMenu />
 		</div>
 	</header>
 </template>
 
 <script>
 import Button from './Button';
+import SettingsMenu from './SettingsMenu';
 
 export default {
   name: 'Header',
   components: {
-    Button
+		Button,
+		SettingsMenu
   },
   props: {
     handleClickToBrowse: Function,
@@ -32,7 +35,7 @@ export default {
 
 <style scoped>
 header {
-	background-color: var(--header-color);
+	background-color: var(--theme-color);
 	width: 100vw;
 	height: var(--header-height);
 	min-height: var(--header-height);
@@ -40,13 +43,13 @@ header {
 	align-items: center;
 	justify-content: space-between;
 	padding: 0 calc(var(--main-padding) * 1);
-	padding-right: 0;
+	padding-right:  0;
 	text-shadow: -2px -1px 0 #00000088, 2px -1px 0 #00000088, -2px 1px 0 #00000088,
 		2px 1px 0 #00000088;
 }
 h1 {
 	font-family: 'Catamaran';
-	color: #eef;
+	color: var(--text-color);
 }
 .button-area {
 	display: flex;

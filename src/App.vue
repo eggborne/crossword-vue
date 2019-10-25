@@ -1,5 +1,5 @@
 <template>
-	<div id="app">
+	<div id="app" :class='`${$store.state.uiOptions.theme}-theme`'>
 		<router-view />
 		<!-- <div id="nav">
 			<router-link to="/">Home</router-link> |
@@ -9,15 +9,27 @@
 </template>
 
 <script>
-
 export default {
   name: 'App',
   created() {
-    console.error('APP created');
+    console.error('APP created', this.$store.state);
     document.documentElement.style.setProperty('--view-height', `${window.innerHeight}px`);
     window.addEventListener('resize', () => {
       document.documentElement.style.setProperty('--view-height', `${window.innerHeight}px`);
     });
+    const options = localStorage.getItem('cc-options');
+    const retrievedUiOptions = options && JSON.parse(options).uiOptions;
+    const retrievedPuzzleOptions = options && JSON.parse(options).puzzleOptions;
+    if (retrievedUiOptions) {
+      console.warn('got local', retrievedUiOptions)
+      this.$store.dispatch('changeUIColor', {attrName: 'themeColor', newValue: retrievedUiOptions.themeColor, save: false});
+      this.$store.dispatch('changeUIColor', {attrName: 'bodyBgColor', newValue: retrievedUiOptions.bodyBgColor, save: false});
+      this.$store.dispatch('changeUIColor', {attrName: 'cellColor', newValue: retrievedUiOptions.cellColor, save: false});
+      this.$store.dispatch('changeUIColor', {attrName: 'blankColor', newValue: retrievedUiOptions.blankColor, save: false});
+      this.$store.dispatch('toggleDarkTheme', { newValue: retrievedUiOptions.theme, save: false});
+    } else {
+      console.warn('NO ENTRY IN LOCAL STORAGE');
+    }
     if (window.PointerEvent) {
       window.CLICK_METHOD = { down: 'onPointerDown', up: 'onPointerUp' };
     } else if (window.TouchEvent) {
@@ -38,13 +50,16 @@ export default {
   --main-padding: 0.75rem;
   --board-size: calc(100vw - var(--main-padding) * 3.5);
   --body-bg-color: #c8c8c8;
-  /* --header-color: #2d3038; */
-  --header-color: #153282;
-  --blank-color: #111;
+  --theme-color: #153282;
+  --blank-color: #060606;
   --cell-color: white;
-  --button-color: rgb(58, 66, 109);
+  --cell-text-color: var(--blank-color);
+  --pane-highlight-color: rgba(255, 166, 0, 0.326);
+  --button-color: rgb(48, 60, 126);
   --button-on-color: blue;
+  --button-selected-color: rgb(35, 167, 33);
   --text-color: #eee;
+  --secondary-text-color: #222;
   --main-font: 'Roboto';
   --cell-width: calc(var(--board-size) / var(--cells-wide));
   --cell-height: calc(var(--board-size) / var(--cells-wide));
@@ -56,10 +71,12 @@ export default {
 html {
   font-size: calc(1rem);
   font-family: var(--main-font);
+  overflow: hidden;
 }
 * {
   user-select: none;
   box-sizing: border-box;
+  /* transition: background 320ms ease; */
 }
 body {
   /* position: fixed; */
@@ -68,6 +85,25 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
+}
+.dark-theme {
+  --body-bg-color: #111;
+  --theme-color: #090909;
+  --button-color: rgb(21, 24, 44);
+  --button-on-color: rgb(44, 44, 79);
+  --button-selected-color: rgb(16, 54, 15);
+  --text-color: #888;
+  --secondary-text-color: var(--text-color);
+  --cell-color: #555;
+  --blank-color: #111;
+  --cell-text-color: var(--blank-color);
+  --pane-highlight-color: rgba(255, 166, 0, 0.121);
+}
+.dark-theme button {
+  border-color: var(--text-color) !important;
+}
+.dark-theme header {
+  color: var(--text-color)
 }
 a {
   text-decoration: none;
@@ -92,6 +128,9 @@ h1 {
     var(--header-height)
     1fr
   ;
+}
+.dimmed {
+  opacity: 0.5;
 }
 #nav {
 	padding: 30px;

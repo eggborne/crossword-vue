@@ -5,11 +5,11 @@
       <SelectBar
         :buttons='sortButtons'
         :option="{}"
-        :targetValue="['date', 'size', 'shaded', 'swastika'].indexOf(sortType)"
+        :targetValue="['date', 'size', 'shaded', 'offensive'].indexOf(sortType)"
         :adjustOption="changeSort"
       />
     </header>
-    <div v-if='diagrams' class='diagram-list'>
+    <div v-cloak v-if='diagrams' class='diagram-list'>
       <div
         class='browse-diagram'
         v-for='diagram in sortedDiagrams'
@@ -23,7 +23,7 @@
         :cellGrid='diagram.cells'
         :selected='diagramSelected === diagram'
         :addedToTraining='addedToTraining(diagram.id)'
-        :swastikaPercent='diagram.swastikaPercent'
+        :offensivePercent='diagram.offensivePercent'
         :mlLabel='savedTrainingData.diagramIds.indexOf(diagram.id) > -1 ? savedTrainingData.output[savedTrainingData.diagramIds.indexOf(diagram.id)][`swastika`] : 0'
       />
       </div>
@@ -46,23 +46,23 @@
           <div>{{ diagramSelected.width }} words</div>
         </div>
         <div>
-          <div>{{ diagramSelected.swastikaPercent }}% swastika</div>
+          <div>{{ diagramSelected.offensivePercent }}% offensive</div>
           <div>{{ diagramSelected.percentShaded }}% shaded</div>
         </div>
       </div>
       <div class='button-area'>
         <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
-          :label="`NOT SWASTIKA`" :handleClick="() => {
+          :label="`NOT Offensive`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 0);
           }"
         />
         <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
-          :label="`SWASTIKA?`" :handleClick="() => {
+          :label="`Offensive?`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 0.5);
           }"
         />
         <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
-          :label="`IS SWASTIKA`" :handleClick="() => {
+          :label="`IS Offensive`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 1);
           }"
         />
@@ -98,7 +98,7 @@
         :cellGrid='diagramSelected.cells'
         :selected='false'
         :addedToTraining='addedToTraining(diagramSelected.id)'
-        :mlLabel='savedTrainingData.diagramIds.indexOf(diagramSelected.id) > -1 ? savedTrainingData.output[savedTrainingData.diagramIds.indexOf(diagramSelected.id)][`swastika`] : 0'
+        :mlLabel='savedTrainingData.diagramIds.indexOf(diagramSelected.id) > -1 ? savedTrainingData.output[savedTrainingData.diagramIds.indexOf(diagramSelected.id)][`offensive`] : 0'
       />
       </div>
       <Button
@@ -144,8 +144,8 @@ export default {
         valueAmount: 'shaded'
       },
       {
-        labelText: 'Swastika',
-        valueAmount: 'swastika'
+        labelText: 'Offensive',
+        valueAmount: 'offensive'
       }
     ]
   }),
@@ -175,8 +175,8 @@ export default {
       if (this.sortType === 'shaded') {
         sortAttr = 'percentShaded';
       }
-      if (this.sortType === 'swastika') {
-        sortAttr = 'swastikaPercent';
+      if (this.sortType === 'offensive') {
+        sortAttr = 'offensivePercent';
       }
       let sortedDiagramList = diagramList.sort((a, b) => parseInt(b[sortAttr]) - parseInt(a[sortAttr]));
       if (sortAttr === 'width' || sortAttr === 'percentShaded') {
@@ -214,7 +214,7 @@ export default {
   top: var(--main-padding);
   left: 50%;;
 	background: var(--body-bg-color);
-	color: var(--blank-color);
+	color: var(--secondary-text-color);
 	width: calc(100vw - var(--main-padding) * 2);
   height: calc(var(--view-height) - var(--main-padding) * 2);
   padding: var(--main-padding) 0;
@@ -260,6 +260,7 @@ header span {
 }
 .select-bar {
   flex-grow: 1;
+  background: green;
   height: var(--header-height);
 }
 .load-spinner, .load-message {
@@ -407,7 +408,7 @@ header span {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr calc(var(--board-size) / 1.5) auto;
   padding: calc(var(--main-padding) * 2);
-  background: var(--header-color);
+  background: var(--theme-color);
   box-shadow: 1px 1px calc(var(--main-padding) / 2) #00000066,
 		-1px -1px calc(var(--main-padding) / 2) #00000066;
   justify-items: center;

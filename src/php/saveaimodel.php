@@ -3,7 +3,7 @@
   $model = $postData['model'];
   $attribute = $postData['attribute'];
 
-  $userSql="UPDATE `ai-models` SET $attribute='$model' WHERE id=1;";
+  $userSql="UPDATE `ai-models` SET model='$model' WHERE attribute='$attribute';";
   $userResult=mysqli_query($link,$userSql);
 
   if ($userResult) {
