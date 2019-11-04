@@ -51,17 +51,17 @@
         </div>
       </div>
       <div class='button-area'>
-        <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
+        <Button :class='[`training-button`, addedToTraining(diagramSelected.id) && `hidden`, !$store.state.gotMLTrainingData && `dimmed`]'
           :label="`NOT Offensive`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 0);
           }"
         />
-        <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
+        <Button :class='[`training-button`, addedToTraining(diagramSelected.id) && `hidden`, !$store.state.gotMLTrainingData && `dimmed`]'
           :label="`Offensive?`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 0.5);
           }"
         />
-        <Button :class='addedToTraining(diagramSelected.id) ? `hidden` : ``'
+        <Button :class='[`training-button`, addedToTraining(diagramSelected.id) && `hidden`, !$store.state.gotMLTrainingData && `dimmed`]'
           :label="`IS Offensive`" :handleClick="() => {
             handleClickToLabel(diagramSelected.id, 'swastika', 1);
           }"
@@ -362,9 +362,9 @@ header span {
   font-weight: normal;
 }
 #delete-button {
-  background-color: rgb(124, 58, 58);
+  background-color: var(--danger-color);
   color: rgb(213, 188, 188);
-  transform: scale(0.89);
+  transform: scale(0.95);
   transform-origin: center;
   justify-self: end;
 }

@@ -2,7 +2,7 @@
 	<header id='page-header'>
 		<h1>Crosswords<span style='opacity: 0.75' >.cc</span></h1>
 		<div class="button-area">
-			<!-- <Button :label="`TRAIN`" :handleClick="handleClickTrain" /> -->
+			<Button :label="`TRAIN`" :handleClick="handleClickTrain" />
 			<Button id='save-button' :label="`SAVE`" :handleClick="handleClickToSave" />
 			<!-- <Button :label="`<`" :handleClick="handleClickPrevious" /> -->
 			<Button :label="`BROWSE`" :handleClick="handleClickToBrowse" />
@@ -28,7 +28,6 @@ export default {
     handleClickPrevious: Function,
     handleClickNext: Function,
     handleClickTrain: Function,
-    scanBoardForImage: Function
   }
 };
 </script>

@@ -11,9 +11,15 @@ const saveToLocalStorage = (payload) => {
 
 export default new Vuex.Store({
   state: {
+    loaded: false,
     gotMLData: false,
     gotMLTrainingData: false,
     editMode: 'diagram',
+    editDirection: 'across',
+    enteringLetters: false,
+    savingType: 'diagram',
+    selectedWord: {},
+    selectedCell: {},
     uiOptions: {
       theme: 'light',
       themeColor: '#153282',
@@ -26,16 +32,22 @@ export default new Vuex.Store({
         themeWords: 2,
         wordLengths: {
           min: 3,
-          max: 15
+          max: 23
         },
         allChecked: true,
-        blackRate: 16,
+        blackRate: 32,
         contiguous: true
       }
     },
     menuOpen: false
   },
   mutations: {
+    setRule(state, payload) {
+      state[payload.attr] = payload.newValue;
+    },
+    setLoaded(state) {
+      state.loaded = true;
+    },
     changeTheme(state, newTheme) {
       state.uiOptions.theme = newTheme;
     },
@@ -57,19 +69,50 @@ export default new Vuex.Store({
     changeEditMode(state, newMode) {
       state.editMode = newMode;
     },
+    changeEditDirection(state, newDirection) {
+      state.editDirection = newDirection;
+    },
+    changeEnteringLetters(state, newValue) {
+      state.enteringLetters = newValue;
+    },
+    changeSavingType(state, newValue) {
+      state.savingType = newValue;
+    },
+    changeSelectedWord(state, newWord) {
+      state.selectedWord = newWord;
+    },
+    changeSelectedCell(state, newCell) {
+      state.selectedCell = newCell;
+    },
     setLoadedState(state, payload) {
       state[payload.loadEvent] = payload.loadedStatus;
     }
   },
   actions: {
+    // adjustRule(context, payload) {
+
+    // },
+    loadSavedUIOptions(context, payload) { 
+      Object.keys(payload).forEach((attr) => {
+        const attrPayload = {
+          attr,
+          newValue: payload[attr]
+        };
+        console.log('dispatching', attrPayload);
+        context.dispatch('changeUIColor', attrPayload);
+      });
+      requestAnimationFrame(() => {
+        document.querySelector("meta[name=theme-color]").setAttribute("content", payload.themeColor); 
+      });
+    },
     changeUIColor(context, payload) {
-      const { newValue, attrName, save } = payload;
-      const mutation = `change${attrName[0].toUpperCase() + attrName.slice(1)}`;
-      const cssVar = `--${attrName.replace(/([a-zA-Z])(?=[A-Z])/g, '$1-').toLowerCase()}`;
+      const { attr, newValue, save } = payload;
+      const mutation = `change${attr[0].toUpperCase() + attr.slice(1)}`;
+      const cssVar = `--${attr.replace(/([a-zA-Z])(?=[A-Z])/g, '$1-').toLowerCase()}`;
       document.documentElement.style.setProperty(cssVar, newValue);
       context.commit(mutation, newValue);
       requestAnimationFrame(() => {
-        if (attrName === 'themeColor') {
+        if (attr === 'themeColor') {
           document.querySelector("meta[name=theme-color]").setAttribute("content", newValue);
         }
         if (save) { saveToLocalStorage({ name: 'uiOptions', value: context.state.uiOptions }); }
@@ -94,8 +137,16 @@ export default new Vuex.Store({
         if (save) { saveToLocalStorage({ name: 'uiOptions', value: context.state.uiOptions }); }
       });
     },
+    toggleDirection(context) {
+      const newDirection = context.state.editDirection === 'across' ? 'down' : 'across';
+      context.commit('changeEditDirection', newDirection);
+    },
     setLoaded(context, loadEvent) {
       context.commit('setLoadedState', { loadEvent, loadedStatus: true });
+    },
+    updateSelectedCell(context, payload) {
+      context.commit('changeSelectedCell', { ...payload });
     }
+
   }
 });

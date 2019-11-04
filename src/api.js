@@ -6,6 +6,92 @@ export default class DB {
   //   window.localStorage.setItem('cc-options', JSON.stringify({ [payload.name]: payload.value }));
   // }
 
+  static async discoverWords(length, quantity) {
+    console.log("getting words of length " + length);
+    let discovered = [];
+    const words = await fetch(`https://api.wordnik.com/v4/words.json/randomWords?minCorpusCount=0&maxCorpusCount=-1&minDictionaryCount=1&maxDictionaryCount=-1&minLength=${length}&maxLength=${length}&sortBy=count&limit=500&api_key=e8f4853623a879a93e24c7a25dd0d2c0c43f5ca0720271190`);
+    const list = await words.json();
+    console.log('list ----->', list);
+    if (list.message) {
+      discovered = undefined;
+    } else {
+      list.forEach(wordObj => {
+        discovered.push(wordObj.word);
+      });
+    }
+    return discovered;
+
+    // $.getJSON(
+    //   "http://api.wordnik.com:80/v4/words.json/randomWords?hasDictionaryDef=true&minCorpusCount=120&maxCorpusCount=-1&minDictionaryCount=9&maxDictionaryCount=-1&minLength=" + length + "&maxLength=" + length + "&limit=1000&api_key=e8f4853623a879a93e24c7a25dd0d2c0c43f5ca0720271190",
+    //   function (data) {
+    //     // console.log(data)
+    //     // for (var w=0;w<data.length;w++) {
+    //     //     var word = data[w].word
+
+    //     //     if (compiledWordList.indexOf(word) === -1) {
+    //     //         compiledWordList.push(word)
+    //     //         getWordData(word)
+    //     //     } else {
+    //     //         console.log("duplicate word " + word + " not added!")
+    //     //         duplicates++
+    //     //     }
+
+    //     // }
+    //     if (data) {
+    //       var word = data[randomInt(0, data.length - 1)].word
+    //       word = word.toLowerCase()
+    //       if (sortedWords[word.length].indexOf(word) === -1) {
+    //         // getWordData(word)
+
+    //         console.log("got " + word)
+    //         compiledWordList.push(word)
+    //         sortedWords[word.length].push(word)
+    //         addedWords.push(word)
+    //       } else {
+    //         // console.log("rejecting duplicate " + word)
+    //         duplicates++
+    //       }
+    //       return data
+    //     }
+
+    //   }
+
+    // );
+
+  }
+
+  static saveWord(word) {
+    return axios({
+      method: 'post',
+      url: 'https://api.eggborne.com/crossword/saveword.php',
+      headers: {
+        'Content-type': 'application/x-www-form-urlencoded'
+      },
+      data: {
+        word,
+        length: word.length.toString()
+      }
+    });
+  }
+
+  static saveClue(word, clues) {
+    console.warn('saving clues for', word);
+    console.warn(clues);
+    clues = JSON.stringify(clues);
+    return axios({
+      method: 'post',
+      url: 'https://api.eggborne.com/crossword/saveclue.php',
+      headers: {
+        'Content-type': 'application/x-www-form-urlencoded'
+      },
+      data: {
+        word,
+        length: word.length.toString(),
+        clues: clues
+      }
+    });
+  }
+
   static getFullWordListOfLength(length) {
     return axios({
       method: 'post',

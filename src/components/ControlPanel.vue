@@ -1,26 +1,36 @@
 <template>
-	<div class="control-panel" :class='[busy && `busy`]'>
-		<div class='info-bar'>
+	<div class="control-panel" :class='[busy && `busy`, $store.state.editMode === `clues` && `minimal`]'>
+		<div v-if='$store.state.editMode !== `clues`' class='info-bar'>
 			<div v-if='busy' class='spinner-area'>
 				<Spinner :direction='-1'/>
 				<div class='loading-message'>GENERATING {{ Math.round((percentBlack / rules.blackRate) * 100) }}%</div>
-				<!-- <Spinner :direction='1'/> -->
 				<Button :label='`STOP`' :handleClick='cancelGeneration' />
 			</div>
 			<div>Words: {{ `${wordsNeeded.across.length}/${wordsNeeded.down.length} (${wordsNeeded.across.length + wordsNeeded.down.length})` }}</div>
-			<div :class='longestWordLength > rules.wordLengths.max ? `violating` : ``'>Longest word: {{ longestWordLength }}</div>
+			<div>Longest word: <span>{{ longestWordLengths[0] }}</span></div>
 			<div :class='percentOffensiveClass'>{{ offensiveQuotient }}% offensive</div>
 			<div :class='[(!isContiguous && rules.contiguous) && `violating untrue`]'>Contiguous</div>
 			<div :class='shortestWordLength < rules.wordLengths.min ? `violating` : ``'>Shortest word: {{ shortestWordLength }}</div>
 			<div>{{ percentBlack }}% black</div>
 			<div :class='allCheckedClass'>All checked</div>
-			<div>Theme words: 2 x 15</div>
+			<div>
+				Theme words:
+				<span v-if='themeWords[0][0]'>
+					{{ themeWords[0].length }} x {{ themeWords[0][0].word.length }}
+				</span>
+				<span v-else>
+					None
+				</span>
+				<span v-if='themeWords[1][0]'>
+				, {{ themeWords[1].length }} x {{ themeWords[1][0].word.length }}
+				</span>
+			</div>
 			<div></div>
 		</div>
-		<div class='control-area'>
+		<div v-if='$store.state.editMode===`diagram`' class='control-area'>
 			<Button :label="`Clear all`" :handleClick="clearBoard" />
-			<!-- <Button :label="`Shade all`" :handleClick="shadeBoard" /> -->
-			<Button :label="`Checked`" :handleClick="() => $store.state.puzzleOptions.rules.allChecked = !$store.state.puzzleOptions.rules.allChecked" :highlighted='rules.allChecked' />
+			<Button :label="`Shade all`" :handleClick="shadeBoard" />
+			<!-- <Button :label="`Checked`" :handleClick="() => $store.state.puzzleOptions.rules.allChecked = !$store.state.puzzleOptions.rules.allChecked" :highlighted='rules.allChecked' /> -->
 			<ButtonMenu 
 				:selections='diagramSizeButtons'
 				:option='options.diagramSize'
@@ -36,40 +46,43 @@
 				:handler='adjustOption'
 			/>
 			<div class='generate-area'>
-				<div>AUTO</div>
-				<Button :class='[busy && `disabled`]' :label="`Generate`" :handleClick="handleClickGenerate" />
-				<Button :label="`Rules...`" :handleClick="handleClickRules" />
+				<Button :class='[(busy || !$store.state.gotMLData) && `disabled`]' :label="`Auto-Generate`" :handleClick="handleClickGenerate" />				
+				<Button 
+					:label='`Rules`'
+					:handleClick='handleClickRules'
+				/>
+				<!-- <Button :label="`Rules...`" :handleClick="handleClickRules" /> -->
 			</div>
-			<ButtonSlider
-				:option='{
-					name:`blackRate`,
-					min: 5,
-					max: 90,
-					step: 1,
-					defaultValue: 16
-				}'
-				:label='`Black`'
-				:currentValue='rules.blackRate'
-				:adjustRangedOption='adjustRangedOption'
+		</div>
+		<div v-else-if='$store.state.editMode===`puzzle`' class='control-area'>
+			<Button :label="`Clear all`" :handleClick="clearLetters" />
+			<Button 
+				:class='[(!selectedCell || !selectedCell.number || $store.state.enteringLetters) && `disabled`]' 
+				:label="`Find Word`" 
+				:handleClick="findWord" 
 			/>
-			<!-- <SelectBar
-				:buttons='diagramSizeButtons'
-				:option="options.diagramSize"
-				:targetValue="this.boardSizes.indexOf(boardSize.width)"
-				:adjustOption="adjustOption"
-				:adjustRangedOption="adjustRangedOption"
-			/> -->
-			<!-- <div></div> -->
-			<!-- <SelectBar 
-				:buttons='symmetryButtons'
-				:option="options.symmetry"
-				:targetValue="symmetry"
-				:adjustOption="adjustOption"
-			/> -->
+			<Button 
+				:class='[!selectedCell && `disabled`, $store.state.enteringLetters && `highlighted`]' 
+				:label="`Edit Letter`"
+				:handleClick="() => $store.commit('changeEnteringLetters', !$store.state.enteringLetters)" 
+			/>
+			<div></div>
+			<div class='generate-area'>
+				<Button :class='[busy && `disabled`]' :label="`Auto-Fill`" :handleClick="fillBoard" />				
+				<Button 
+					:label='`Rules`'
+					:handleClick='handleClickRules'
+				/>
+			</div>
+			<div></div>
+			<Button :label="`Save new word`" :handleClick="handleClickToSaveWord" />
+		</div>
+		<div v-else-if='$store.state.editMode===`clues`' class='control-area'>
+
 		</div>
 		<div class='lower-area'>
 			<ModeBar
-				
+				:changeEditMode='changeEditMode'
 			/>
 		</div>
 	</div>
@@ -102,6 +115,7 @@ export default {
 		],		
   }),
   props: {
+		selectedCell: Object,
 		busy: Boolean,
     boardSize: Object,
 		options: Object,
@@ -114,13 +128,18 @@ export default {
     adjustOption: Function,
     adjustRangedOption: Function,
     clearBoard: Function,
+    clearLetters: Function,
     shadeBoard: Function,
-    handleClickToSave: Function,
+    handleClickToSaveWord: Function,
     handleClickToBrowse: Function,
     handleGetDiagrams: Function,
     handleClickGenerate: Function,
     handleClickRules: Function,
-    cancelGeneration: Function
+		cancelGeneration: Function,
+		changeEditMode: Function,
+		findWord: Function,
+		fillBoard: Function,
+		themeWords: Array
   },
   components: {
     Button,
@@ -130,20 +149,24 @@ export default {
     ModeBar,
     Spinner
 	},
-	mounted() {
-		// this.rules = this.$store.state.puzzleOptions.rules;
-		// console.log('set to', this.$store.state.puzzleOptions.rules.wordLengths.max)
-	},
   computed: {
 		rules() {
 			return this.$store.state.puzzleOptions.rules;
 		},
-    longestWordLength() {
-      if (this.wordsNeeded.across.length) {
-        const longestAcross = this.wordsNeeded.across.sort((a, b) => b.word.length - a.word.length)[0].word.length;
-        const longestDown = this.wordsNeeded.down.sort((a, b) => b.word.length - a.word.length)[0].word.length;
-        return longestAcross > longestDown ? longestAcross : longestDown;
-      }
+    longestWordLengths() {
+			let wordArray = Object.values(this.wordsNeeded).flat(2);
+      if (wordArray.length) {
+				let sortedWords = wordArray.sort((a, b) => b.word.length - a.word.length);
+				const longest = sortedWords[0].word.length;
+				if (this.percentBlack && this.percentBlack > 0) {
+					const secondLongest = sortedWords.filter(wordObject => wordObject.word.length !== longest)
+					return [longest, secondLongest];
+				} else {
+					return [15, 15]
+				}
+      } else {
+				return [15, 15];
+			}
     },
     shortestWordLength() {
       if (this.wordsNeeded.across.length) {
@@ -188,11 +211,15 @@ export default {
 	position: relative;
 	font-size: calc(var(--header-height) / 3.5);
 	max-width: 100%;
+	height: 100%;
 	flex-basis: var(--control-panel-min-height);
 	background: var(--theme-color);
 	display: flex;
 	flex-direction: column;
-	/* align-items: stretch; */
+	justify-content: space-between;
+}
+.control-panel.minimal {
+	height: min-content;
 }
 .untrue {
 	text-decoration: line-through;
@@ -204,17 +231,19 @@ export default {
 	color: rgb(221, 221, 101);
 }
 .control-area {
-	/* padding: var(--main-padding) calc(var(--main-padding) * 1.25); */
 	padding: 1% var(--main-padding);
+	/* height: calc(var(--header-height) * 2.75); */
 	max-height: calc(var(--header-height) * 2.75);
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
-	grid-template-rows: 0.5fr 0.5fr;
+	grid-auto-rows: 1fr;
 	grid-column-gap: calc(var(--main-padding) / 3);
-	grid-row-gap: 7%;
 	flex-grow: 1;
+	justify-self: flex-start;
 	align-items: center;
-	/* align-content: center; */
+}
+.control-panel.minimal > .control-area {
+	padding: 0;
 }
 .control-panel.busy .info-bar > div:not(:first-child) {
 	opacity: 0.2;
@@ -233,6 +262,7 @@ export default {
 	align-content: center;
 	justify-items: center;
 	z-index: 1;
+	
 }
 .spinner-area > .loading-message {
 	font-weight: 700;
@@ -249,28 +279,32 @@ export default {
 .spinner-area button {
 	height: calc(var(--header-height) / 1.25);
 	width: 60%;
-	background: rgb(47, 8, 8);
+	background: rgb(47, 8, 8);	
 }
 .generate-area {
 	height: 100%;
+	/* grid-column-start: 2; */
 	grid-column-end: span 2;
 	display: grid;
-	grid-template-columns: min-content 1fr 1fr;
+	grid-template-columns: 1fr 1fr;
 	padding: 0 calc(var(--main-padding) / 4);
+	box-sizing: content-box;
 	align-self: center;
 	background: #00000055;
+	border-radius: calc(var(--main-padding) / 4);
 }
 .generate-area > div:first-of-type {
-	font-size: 0.6rem;
+	/* font-size: 0.6rem;
 	padding: 0.1rem;
 	font-weight: 700;
 	writing-mode: vertical-lr;
 	transform: rotate(180deg);
 	align-self: center;
-	padding: calc(var(--main-padding) / 4);
+	padding: calc(var(--main-padding) / 4); */
 }
 .generate-area > button {	
 	align-self: center;
+	width: 50%;
 }
 .generate-area > button:first-of-type {
 	border-right-color: #ffffff55;
@@ -300,12 +334,12 @@ export default {
 .lower-area {
 	display: flex;
 	justify-content: space-between;
-	flex-grow: 1;
 	justify-self: flex-end;
 }
 .mode-bar {
+	font-size: 0.8rem;
 	/* margin-top: var(--main-padding); */
-	align-self: flex-end;
+	/* align-self: flex-end; */
 }
 #lower-area button {
 	font-size: 1rem;

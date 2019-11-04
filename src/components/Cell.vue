@@ -1,10 +1,11 @@
 <template>
 	<div 
-    :class='[`cell`, selected && `selected`, highlighted && `highlighted`, shaded && `shaded`]'
+    :class='[`cell`, selected && `selected`, highlighted && `highlighted`, violating && `violating`, shaded && `shaded`]'
     v-on:pointerdown='handleClick'
   >
-    <div data-html2canvas-ignore class='number'>{{ number }}</div>
-    <div data-html2canvas-ignore class='letter'>{{ letter }}</div>
+    <div class='number'>{{ number }}</div>
+    <div class='letter'>{{ letter }}</div>
+    <slot></slot>
   </div>
 </template>
 
@@ -39,33 +40,57 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  font-weight: 700;
+  font-weight: bold;
   width: var(--cell-width);
   height: var(--cell-height);
   max-height: var(--cell-height);
   padding: 0;
   z-index: 1;
+  text-transform: uppercase;  
 }
 .cell:before {
   content: '';
   position: absolute;
   width: inherit;
   height: inherit;
-  background: rgba(0, 0, 255, 0.5);
-  display: none;
+  background: var(--theme-word-color);
+  /* border: calc(var(--cell-width) / 8) solid var(--theme-word-color); */
+  /* display: none; */
+  opacity: 0;
+  pointer-events: none;
 }
-.cell.highlighted:before {
-  display: block;
+.cell:after {
+  content: '';
+  position: absolute;
+  width: inherit;
+  height: inherit;
+  background: var(--theme-word-color-2);
+  /* border: calc(var(--cell-width) / 8) solid var(--theme-word-color-2); */
+  /* display: none; */
+  opacity: 0;
+  pointer-events: none;
 }
-/* .cell.violating {
-  background: rgba(255, 0, 0, 0.128);
+/* .cell.shaded:before {
+  opacity: 0.99
 } */
+.cell.shaded {
+  background-color: var(--blank-color);
+}
+.cell.theme-word:before, .cell.theme-word-2:after {
+  opacity: 0.25;
+}
+.cell.violating {
+  background: rgba(255, 0, 0, 0.128);
+}
+.cell.highlighted {
+  background:rgba(0, 128, 0, 0.27);
+}
 .cell.selected {
   /* background: #00ff0099 !important; */
   outline: calc(var(--cell-width) / 6) solid green;
 }
 .cell.shaded {
-  background: var(--blank-color) !important;
+  /* background: var(--blank-color) !important; */
 }
 .cell > .number {
   position: absolute;

@@ -3,54 +3,59 @@
     <div><div id='diagram-pane'
       class='mode-pane'
       :class='$store.state.editMode === `diagram` ? `selected` : ``'
-      @pointerdown='() => $store.commit(`changeEditMode`, `diagram`)'
+      @pointerdown='changeEditMode'
     >EDIT DIAGRAM</div></div>
     <div><div id='puzzle-pane'
       class='mode-pane'
       :class='$store.state.editMode === `puzzle` ? `selected` : ``'
-      @pointerdown='() => $store.commit(`changeEditMode`, `puzzle`)'
+      @pointerdown='changeEditMode'
     >EDIT PUZZLE</div></div>
+    <div><div id='clues-pane'
+      class='mode-pane'
+      :class='$store.state.editMode === `clues` ? `selected` : ``'
+      @pointerdown='changeEditMode'
+    >EDIT CLUES</div></div>
   </div>
 </template>
 
 <script>
 export default {
-  name: 'Spinner',  
+  name: 'Spinner',
+  props: {
+    changeEditMode: Function
+  }
 };
 </script>
 
 <style scoped>
 .mode-bar {
   width: 100%;
-  height: calc((var(--header-height) * 1.25));
+  height: var(--header-height);
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-content: stretch;
-  justify-items: stretch;
-  align-self: flex-end;
+  grid-template-columns: 1fr 1fr 1fr;
 }
 .mode-bar > div {
   display: flex;
   align-items: center;
+  justify-content: center;
 }
-.mode-bar > div:nth-child(1) {
+.mode-bar > div:first-child {
   border-right: calc(var(--main-padding) / 8) solid #eeeeeeaa;
 }
-.mode-bar > div:nth-child(2) {
+.mode-bar > div:last-child {
   border-left: calc(var(--main-padding) / 8) solid #eeeeeeaa;
-  justify-content: flex-end;
 }
 .mode-pane {
   height: 100%;
-  width: calc(100% - (var(--main-padding) / 2));
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  text-shadow: -2px -1px 0 #00000088, 2px -1px 0 #00000088, -2px 1px 0 #00000088,
-    2px 1px 0 #00000088;
-  opacity: 0.8;
+  text-shadow: -2px -1px 0 #00000066, 2px -1px 0 #00000066, -2px 1px 0 #00000066,
+    2px 1px 0 #00000066;
+  opacity: 0.75;
 }
 .mode-pane.selected {
   opacity: 1;

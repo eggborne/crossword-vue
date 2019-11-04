@@ -21,13 +21,16 @@ export default {
     const retrievedUiOptions = options && JSON.parse(options).uiOptions;
     const retrievedPuzzleOptions = options && JSON.parse(options).puzzleOptions;
     if (retrievedUiOptions) {
-      console.warn('got local', retrievedUiOptions)
-      this.$store.dispatch('changeUIColor', {attrName: 'themeColor', newValue: retrievedUiOptions.themeColor, save: false});
-      this.$store.dispatch('changeUIColor', {attrName: 'bodyBgColor', newValue: retrievedUiOptions.bodyBgColor, save: false});
-      this.$store.dispatch('changeUIColor', {attrName: 'cellColor', newValue: retrievedUiOptions.cellColor, save: false});
-      this.$store.dispatch('changeUIColor', {attrName: 'blankColor', newValue: retrievedUiOptions.blankColor, save: false});
-      this.$store.dispatch('toggleDarkTheme', { newValue: retrievedUiOptions.theme, save: false});
+      console.warn('got local', retrievedUiOptions);
+      this.$store.dispatch('loadSavedUIOptions', retrievedUiOptions)
+      // this.$store.dispatch('changeUIColor', {attr: 'themeColor', newValue: retrievedUiOptions.themeColor, save: false});
+      // this.$store.dispatch('changeUIColor', {attr: 'bodyBgColor', newValue: retrievedUiOptions.bodyBgColor, save: false});
+      // this.$store.dispatch('changeUIColor', {attr: 'cellColor', newValue: retrievedUiOptions.cellColor, save: false});
+      // this.$store.dispatch('changeUIColor', {attr: 'blankColor', newValue: retrievedUiOptions.blankColor, save: false});
+      // this.$store.dispatch('toggleDarkTheme', { newValue: retrievedUiOptions.theme, save: false});
     } else {
+      const manifest = require("../public/manifest.json");
+      document.querySelector("meta[name=theme-color]").setAttribute("content", manifest.theme_color);
       console.warn('NO ENTRY IN LOCAL STORAGE');
     }
     if (window.PointerEvent) {
@@ -60,13 +63,16 @@ export default {
   --button-selected-color: rgb(35, 167, 33);
   --text-color: #eee;
   --secondary-text-color: #222;
+  --danger-color: #7c3a3a;
   --main-font: 'Roboto';
   --cell-width: calc(var(--board-size) / var(--cells-wide));
   --cell-height: calc(var(--board-size) / var(--cells-wide));
-  --cell-letter-size: calc(var(--cell-width) / 2.5);
+  --cell-letter-size: calc(var(--cell-width) / 1.5);
   --cell-number-size: calc(var(--cell-width) / 3.5);
   --control-row-height: calc(var(--header-height) * 1.25);
   --control-panel-min-height: calc((var(--control-row-height) * 3.75) + (var(--main-padding) * 3));
+  --theme-word-color: rgba(0, 0, 255, 0.25);
+  --theme-word-color-2: rgb(58, 173, 240);
 }
 html {
   font-size: calc(1rem);
@@ -115,6 +121,39 @@ h1 {
 	font-size: calc(var(--header-height) / 2.5);
 	padding: 0;
 	margin: 0;
+}
+input[type='range'] {
+	
+	position: relative;
+	-webkit-appearance: none; /* Override default CSS styles */
+	appearance: none;
+	/* flex-grow: 1; */
+	height: calc(var(--main-padding) / 1.5);
+	border: 1px solid var(--cell-color);
+	border-radius: var(--main-padding);
+	/* background: transparent; */
+	outline: none;
+	/* opacity: 0.75; */
+}
+input::-webkit-slider-thumb {
+	border-radius: 50%;
+	-webkit-appearance: none;
+	appearance: none;
+	width: calc(var(--header-height) / 2);
+	height: calc(var(--header-height) / 2);
+	transform-origin: center;
+	transform: scale(1.25);
+	background: var(--cell-color);
+	cursor: pointer;
+}
+input::-moz-range-thumb {
+	border-radius: 50%;
+	width: calc(var(--header-height) / 2);
+	height: calc(var(--header-height) / 2);
+	transform-origin: center;
+	transform: scale(1.25);
+	background: var(--cell-color);
+	cursor: pointer;
 }
 #app {
 	color: var(--text-color);

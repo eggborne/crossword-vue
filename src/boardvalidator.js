@@ -187,8 +187,10 @@ export default class BoardValidator {
       }
     }
     let sameIndexCount = 0;
-    // const allCells = [...grid].flat();    
-    const startingCell = allCells.filter(cell => cell.number == 1)[0];
+    // const allCells = [...grid].flat();
+     
+    // const startingCell = allCells.filter(cell => cell.number == 1)[0];
+    const startingCell = allCells.find(cell => !cell.shaded)
     this.currentIndex = (startingCell.row * grid.length) + (startingCell.column);
     this.visited.push(this.currentIndex);
     const startingIndex = this.currentIndex;

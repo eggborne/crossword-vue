@@ -3,8 +3,7 @@
 		<!-- <div class="slider-label">{{ currentValue }}</div> -->
 		<input
 			id='diagram-slider'
-			v-on:input="handleChangeSliderValue"
-			v-model="currentValue"
+			v-model="rangeValue"
 			:label="option.name"
 			type="range"
 			:min="option.min"
@@ -24,15 +23,15 @@ export default {
   props: {
     rangeValue: Number,
     option: Object,
-    adjustRangedOption: Function
+    // adjustRangedOption: Function
   },
-  created() {
-    this.currentValue = this.rangeValue || this.option.defaultValue;
-  },
+  // created() {
+  //   this.currentValue = this.rangeValue || this.option.defaultValue;
+  // },
   methods: {
-    handleChangeSliderValue(e) {
-      this.adjustRangedOption(this.option.name, this.currentValue);
-    }
+    // handleChangeSliderValue(e) {
+    //   this.adjustRangedOption(this.option.name, this.currentValue);
+    // }
   }
 };
 </script>

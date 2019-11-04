@@ -23,7 +23,7 @@
         <input
           type='color'
           v-model='$store.state.uiOptions[buttonObj.name]'
-          @change='(e) => $store.dispatch(`changeUIColor`, {attrName: buttonObj.name, newValue: e.target.value, save: true})'
+          @change='(e) => $store.dispatch(`changeUIColor`, {attr: buttonObj.name, newValue: e.target.value, save: true})'
         />
       </div>
     </div>

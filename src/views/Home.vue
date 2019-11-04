@@ -1,25 +1,50 @@
 <template>
-  <div class="home">
+  <div :class='[`home`, $store.state.loaded && `ready`, $store.state.editMode === `clues` && `clues-mode`]'>
     <Header
       :handleClickToBrowse='handleClickToBrowse'
-      :handleClickToSave='handleClickToSave'
+      :handleClickToSave='$store.state.editMode === `diagram` ? handleClickToSaveDiagram : handleClickToSavePuzzle'
       :handleClickPrevious='handleClickPrevious'
       :handleClickNext='handleClickNext'
-      :handleClickTrain='handleClickTrain'
+      :handleClickTrain='discoverNewWords'
     />
-    <div class='board-area'>
+    <div v-if='$store.state.editMode !== `clues`' class='board-area'>
       <Board
         :cellGrid='cellGrid'
+        :highlightedWords='highlightedWords'
         :handleCellClick='
         $store.state.editMode === `diagram` ? handleCellFlip :
         $store.state.editMode === `puzzle` ? handleCellSelect : null
         '
-        :selectedCellIndex='selectedCellIndex'
+        :selectedCell='selectedCell'
         :violatingCells='violatingCells'
+        :themeWords='themeWords'
+        :changeLetter='changeLetter'
       />
+    </div>
+    <div v-else class='board-area'>
+      <div class='clue-display'>
+        <header>Words and clues</header>
+        <div v-if='this.fullWordsFound' class='list-area'>
+          <h1 class='direction-label'>Across</h1>
+          <div class='clue-list across'>
+            <div class='word-clue-entry' v-for='wordObj in this.wordsNeeded.across.filter(wordObj => !wordObj.word.includes(`*`))' :key='wordObj.id'>
+              <div>{{ wordObj.number }}.</div>
+              <div>{{ wordObj.word.toUpperCase() }}</div>
+              <div>{{ wordObj.clues[wordObj.selectedClue] }}</div>
+              <button @pointerdown='() => handleClickToSaveClue(wordObj)' class='expand-button'>
+                {{ wordObj.clues.length ? `CHANGE` : `ADD` }} CLUE
+                <!-- <div class='down-caret'></div> -->
+              </button>
+            </div>
+          </div>
+          <h1 class='direction-label'>Down</h1>
+
+        </div>        
+      </div>
     </div>
     <ControlPanel
       :editMode='editMode'
+      :selectedCell='selectedCell'
       :options='options'
       :busy='generating'
       :boardSize='boardSize'
@@ -32,23 +57,35 @@
       :addCellLabels='addCellLabels'
       :adjustOption='adjustOption'
       :adjustRangedOption='adjustRangedOption'
+      :clearLetters='clearLetters'
       :clearBoard='clearBoard'
       :shadeBoard='shadeBoard'
-      :handleClickToSave='handleClickToSave'
+      :handleClickToSaveWord='handleClickToSaveWord'
       :handleClickToBrowse='handleClickToBrowse'
       :handleClickChooseDiagram='changeDiagram'
       :handleClickGenerate='generateNewBoard'
       :cancelGeneration='cancelGeneration'
-      :handleClickRules='() => getViolatingBoard(50, `offensive`, 50, 100)'
+      :handleClickRules='() => showingModal = `rules`'
+      :findWord='findWord'
+      :fillBoard='fillBoard'
+      :themeWords='themeWords'
     />
     <div v-if='showingModal' id='dark-mask'></div>
     <SaveModal
-      v-if='showingModal === `save`'
+      :type='$store.state.savingType'
+      v-if='showingModal === `save` || showingModal === `clues`'
       :handleSaveDiagram='handleSaveDiagram'
+      :handleSaveWord='saveNewWord'
       :handleClickCancelSave='handleClickCancelModal'
+      :handleDeleteClue='handleDeleteClue'
+      :wordObj='$store.state.selectedWord'
     >
     {{ saveMessage }}
     </SaveModal>
+    <RulesModal
+      v-if='showingModal === `rules`'
+      :handleClickCloseRules='() => showingModal = undefined'      
+    />
     <BrowseModal
       v-if='showingModal === `browse`'
       :auditMode='auditMode'
@@ -74,12 +111,12 @@
 </template>
 
 <script>
-// import Vue from 'vue';
 import DB from '../api.js';
 import axios from 'axios';
 import Header from '@/components/Header.vue';
 import Board from '../components/Board.vue';
 import ControlPanel from '../components/ControlPanel.vue';
+import RulesModal from '../components/RulesModal.vue';
 import BrowseModal from '../components/BrowseModal.vue';
 import SaveModal from '../components/SaveModal.vue';
 import BoardValidator from '../boardvalidator';
@@ -90,9 +127,9 @@ import GridScanner from '../gridscanner';
 
 const diagramCreator = new DiagramCreator();
 const boardValidator = new BoardValidator();
-const gridScanner = new GridScanner();
+let gridScanner = new GridScanner();
 
-require('../vkthread.min.js');
+// require('../vkthread.min.js');
 
 // let validatorUrl = require('../boardvalidator.js')
 
@@ -103,11 +140,13 @@ function randomInt(min, max) {
 export default {
   name: 'Home',
   data: () => ({
-    doneLoading: false,
     editMode: 'diagram',
     selectedCellIndex: undefined,
+    selectedCell: undefined,
     showingModal: undefined,
-    wordList: [],
+    fullWordList: [
+      
+    ],
     diagrams: undefined,
     boardSize: { width: 15, height: 15 },
     symmetry: 2,
@@ -119,6 +158,7 @@ export default {
       across: [],
       down: []
     },
+    highlightedWords: [],
     options: {
       diagramSize: {
         name: 'diagramSize',
@@ -153,46 +193,58 @@ export default {
     auditMode: false,
     rules: {},
     violatingCells: [],
+    themeWords: [[], []],
     onLayer: 0,
     generating: false,
+    buildQueue: []
     // worker: window.WEB_WORKER
   }),
   computed: {
     percentBlack() {
-      return this.cellGrid.length ? this.getPercentBlack(this.cellGrid) : 0;
+      return (this.cellGrid.length) ? this.getPercentBlack(this.cellGrid) : 0;
+    },
+    fullWordsFound() {
+      return this.wordsNeeded.across.filter(wordObj => !wordObj.word.includes(`*`)).length ||
+      this.wordsNeeded.down.filter(wordObj => !wordObj.word.includes(`*`)).length
     }
   },
   mounted() {
+    window.addEventListener('load', () => {
+      console.error('LOADED.');  
+      this.$store.commit('setLoaded');     
+    });
     this.createGrid(this.boardSize);
-    this.addCellLabels();
-    this.getWordsNeeded();
-    this.doneLoading = true;
-    setTimeout(() => {
-      this.getMLData().then(() => {
-      console.error('Home.vue getMLData finished')      
-
-      });      
-    }, 200);
+    requestIdleCallback(() => {
+      this.addCellLabels();
+      this.getWordsNeeded();      
+      setTimeout(() => {
+        this.getMLData().then(() => {
+          console.error('Home.vue getMLData finished')      
+        });      
+      }, 200);
+    });
     this.rules = this.$store.state.puzzleOptions.rules;
   },
   components: {
     Header,
     Board,
     ControlPanel,
+    RulesModal,
     BrowseModal,
     SaveModal,
     MicroBoard
   },
   methods: {
-    getContiguous(grid) {
-      const validator = new BoardValidator();
-      const param = {
-        fn: validator.checkIfContiguous,
-        context: validator,
-        args: [grid, grid.flat()]
-      };
-      return vkthread.exec(param);
-    },
+    // getContiguous(grid) {
+    //   const validator = new BoardValidator();
+    //   const param = {
+    //     fn: validator.checkIfContiguous,
+    //     context: validator,
+    //     args: [grid, grid.flat()]
+    //   };
+    //   return vkthread.exec(param);
+    // },
+    
     // sendWorkerForScore(grid) {      
     //   const workerParams = {
     //     fn: (grid, allCells, validator) => {
@@ -355,14 +407,10 @@ export default {
     //   };
     //   return vkthread.exec(workerParams);
     // },
-    async getMLData() {      
+    async getMLData() {
+      this.$store.s    
       let modelData = await gridScanner.updateModel('offensive');
-      this.$store.dispatch('setLoaded', 'gotMLData');
-      const trainingData = await gridScanner.getTrainingData('offensive')
-      if (trainingData) {
-        this.savedTrainingData = trainingData;
-        this.$store.dispatch('setLoaded', 'gotMLTrainingData');
-      }
+      this.$store.dispatch('setLoaded', 'gotMLData');      
       return;
     },
     getFlippedCellGrid(grid) {
@@ -389,13 +437,21 @@ export default {
       });
       return grid;
     },
-    handleClickToSave() {
-      // const newData = this.savedTrainingData.input.filter(inp => inp.length === 225);
-      // console.log(newData);
-      // this.savedTrainingData = newData;
-      // DB.saveAITrainingData('offensive', newData).then(resp => {
-      //   console.log('resp', resp)
-      // })
+    handleClickToSaveDiagram() {
+      this.$store.commit('changeSavingType', 'diagram')
+      this.showingModal = 'save';
+    },
+    handleClickToSavePuzzle() {
+      this.$store.commit('changeSavingType', 'puzzle')
+      this.showingModal = 'save';
+    },
+    handleClickToSaveWord() {
+      this.$store.commit('changeSavingType', 'word')
+      this.showingModal = 'save';
+    },
+    handleClickToSaveClue(wordObj) {
+      this.$store.commit('changeSelectedWord', wordObj)
+      this.$store.commit('changeSavingType', 'clues')
       this.showingModal = 'save';
     },
     async handleClickPrevious() {
@@ -431,13 +487,20 @@ export default {
         };
       });
       ioArray = ioArray.filter(item => item.input.length === 225);
-      // gridScanner = new GridScanner();
-      // gridScanner.refreshModel();
-      // gridScanner.trainScanner(ioArray);
+      gridScanner = new GridScanner();
+      gridScanner.refreshModel();
+      gridScanner.trainScanner(ioArray);
       this.saveAIModelToDB();
     },
     async handleClickToLabel(diagramId, violation, violating) {
       console.warn('handleClickToLabel received', diagramId, violation, violating);
+      if (!this.savedTrainingData.input.length) {
+        const trainingData = await gridScanner.getTrainingData('offensive');
+        if (trainingData) {
+          this.savedTrainingData = trainingData;
+          this.$store.dispatch('setLoaded', 'gotMLTrainingData');
+        }
+      }
       const alreadyThere = [...this.savedTrainingData.diagramIds].indexOf(diagramId) > -1;
       if (!alreadyThere) {
         let grid;
@@ -473,18 +536,22 @@ export default {
       return diagramArray;
     },
     async saveAIModelToDB() {
-      // const modelString = JSON.stringify(gridScanner.net.toJSON());
-      // document.getElementById('model-display').innerText = 'SAVING...';
-      // document.getElementById('model-display').style.display = 'block';
-      // this.busySaving = true;
-      // const saveAIResponse = await DB.saveAIModel('offensive', modelString);
-      // console.warn('save AI responded', saveAIResponse.data);
-      // this.busySaving = false;
-      // document.getElementById('model-display').innerText = 'SAVED!';
-      // document.getElementById('model-display').style.background = 'green';
-      // setTimeout(() => {
-      //   document.getElementById('model-display').style.display = 'none';
-      // }, 1000);
+      const modelString = JSON.stringify(gridScanner.net.toJSON());
+      document.getElementById('model-display').innerText = 'SAVING...';
+      document.getElementById('model-display').style.display = 'block';
+      this.busySaving = true;
+      const saveAIResponse = await DB.saveAIModel('offensive', modelString);
+      console.warn('save AI responded', saveAIResponse.data);
+      this.busySaving = false;
+      document.getElementById('model-display').innerText = 'SAVED!';
+      document.getElementById('model-display').style.background = 'green';
+      setTimeout(() => {
+        document.getElementById('model-display').style.display = 'none';
+      }, 1000);
+    },
+    async handleDeleteClue(wordObj, clueIndex) {
+      console.warn('received', wordObj.word, clueIndex, wordObj.clues[clueIndex]);
+
     },
     async handleSaveDiagram(creator) {
       if (!creator) {
@@ -569,17 +636,18 @@ export default {
       return cellString;
     },
     getWordsNeeded(cellGrid) {
-      const grid = cellGrid ? [...cellGrid] : this.cellGrid;
+      const grid = cellGrid ? cellGrid : this.cellGrid;
       const violations = [];
       const newWordsNeeded = {
         across: [],
         down: []
       };
       grid.forEach((row, r) => {
+        // row.filter(cell => cell.number).forEach((cell, c) => {
         row.forEach((cell, c) => {
+          // cell.letter = '';
           if (cell.number) {
             const cellIndex = (r * grid.length) + c;
-            cell.letter = '';
             const blankToLeft = c === 0 || row[c - 1].shaded;
             const blankAbove = r === 0 || grid[r - 1][c].shaded;
             let wordLengthToRight;
@@ -634,24 +702,27 @@ export default {
               newWordsNeeded.across.push({
                 number: cell.number,
                 word: '*'.repeat(wordLengthToRight),
-                letterIndexes: acrossLetters
+                letterIndexes: acrossLetters,
+                clues: [],
+                selectedClue: 0
               });
             }
             if (wordLengthBelow) {
               newWordsNeeded.down.push({
                 number: cell.number,
                 word: '*'.repeat(wordLengthBelow),
-                letterIndexes: downLetters
+                letterIndexes: downLetters,
+                clues: [],
+                selectedClue: 0
               });
             }
-          } else if (cell.letter) {
-            cell.letter = '';
           }
         });
       });
       if (!cellGrid) {
         this.wordsNeeded = newWordsNeeded;
       }
+      // console.log('newWordsNeeded', newWordsNeeded)
       return newWordsNeeded;
     },
     getViolatingCells(list, noDisplay, skipMax) {
@@ -678,6 +749,9 @@ export default {
           tooShort = false;
         }
         if (tooShort || tooLong) {
+          if (tooLong) {
+            console.error(wordObj.number, 'DOWN IS TOO LONG!')
+          }
           wordObj.letterIndexes.forEach(index => {
             violating.push(index);
           })
@@ -686,30 +760,163 @@ export default {
       if (!noDisplay) {
         this.violatingCells = violating;
       }
-      // console.warn('got violating cells in', window.performance.now() - st)
+      // console.warn('got', violating.length, 'violating cells in', window.performance.now() - st);
+      // console.info(violating)
       return violating;
     },
-    
+    changeLetter(e, index, newLetter) {
+      console.log('cocks', e, index, newLetter);
+      let allCells = this.cellGrid.flat();
+      let targetCell = allCells[index];
+      this.cellGrid[targetCell.row][targetCell.column].letter = newLetter;
+      console.log('targ', e.target.value)
+      e.target.value = '';
+      
+      if (this.$store.state.editDirection === 'across') {
+        if (!targetCell.shaded && 
+        targetCell.column !== this.boardSize.width - 1 &&
+        allCells[this.selectedCell.index + 1] && !allCells[this.selectedCell.index + 1].shaded ) {
+          // this.selectedCell.index += 1;
+          this.selectedCell = allCells[this.selectedCell.index + 1]
+        } else {
+          this.$store.commit('changeEnteringLetters', false);
+        }
+      } else {
+         if (!targetCell.shaded && 
+        allCells[this.selectedCell.index + this.boardSize.width] && !allCells[this.selectedCell.index + this.boardSize.width].shaded ) {
+          this.selectedCell = allCells[this.selectedCell.index + this.boardSize.width]
+        } else {
+          this.$store.commit('changeEnteringLetters', false);
+        }
+      }
+      this.getWordsNeeded();
+    },
+    fillWithWord(word, number, direction) {
+      let cells = this.cellGrid.flat();
+      console.warn('gonna fill', number, direction, 'with', word);
+      let targetWord = this.wordsNeeded[direction].filter(wordObj => wordObj.number === number)[0];
+      let indexes = targetWord.letterIndexes;
+      if (word) {
+        indexes.forEach((index, i) => { 
+          cells[index].letter = word.split('')[i]
+        });
+        console.error('setting the word in wordsNeeded to', word)
+        targetWord.word = word;
+      } else {
+        this.violatingCells.push(...indexes);
+        this.highlightedWords.splice(this.highlightedWords.indexOf(targetWord), 1);
+        setTimeout(() => {          
+          this.highlightedWords.push(targetWord);
+        }, 500)
+      }
+
+    },
+    async findWord(e, direction, skipFill) {
+      const editDirection = direction || this.$store.state.editDirection;
+      const rootObj = this.getRootWords(this.selectedCell.index)[this.$store.state.editDirection];
+      console.log('root is', rootObj)
+      let pattern = '';
+      rootObj.letterIndexes.forEach(ind => {
+        pattern += this.cellGrid.flat()[ind].letter.toUpperCase() || '*';
+      })
+      const matchingWords = [];
+      console.log('got pattern', pattern)
+      const length = pattern.length;
+      let wordList = this.fullWordList[length];
+      if (!wordList) {
+        console.error('no list yet! getting from db...')
+        wordList = await this.getWordList(length);
+      } 
+      wordList = wordList.sort(() => Math.random() - 0.5);
+      for (let i = 0; i < wordList.length; i += 1) {
+        let word = wordList[i].word.toUpperCase();
+        let match = true;
+        pattern.split('').forEach((char, c) => {
+          if (char !== '*' && char !== word[c]) {
+            match = false;
+          }
+        });
+        if (match) {
+          matchingWords.push(wordList[i])
+        }
+      }
+      console.log('found matching words', matchingWords.length);
+      // let winner;
+      // if (matchingWords.length) {
+      //   winner = matchingWords[randomInt(0, matchingWords.length - 1)];
+      //   console.log('winner', winner);
+      // }
+      // if (!skipFill && winner) {
+      //   this.fillWithWord(winner.word, this.selectedCell.number, editDirection);
+      // }
+      return matchingWords.length ? matchingWords : undefined;
+    },
+
+    async getClues(word) {
+      let clueArray = [];
+      if (!this.fullWordList[word.length]) {
+        console.log('need to get list of', word.length)
+        await this.getWordList(word.length);
+      }
+      let matchingEntries = this.fullWordList[word.length].filter(listObj => word.toUpperCase() === listObj.word.toUpperCase());
+      matchingEntries.forEach(entry => {
+        entry.clue = entry.clue[0].toUpperCase() + entry.clue.substr(1, entry.clue.length);
+        clueArray.push(entry.clue);
+      })
+      console.log('clues for', word, ':', clueArray);
+      
+      return clueArray
+    },
+
     getWordList(length) {
-      console.error('CALLING DB FOR', length, '-LETTER WORDS |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||');
+      console.error('CALLING DB FOR', length, '-LETTER WORDS');
       return new Promise((resolve) => {
-        this.getFullWordListOfLength(length).then((response) => {
+        DB.getFullWordListOfLength(length).then((response) => {
           if (response.data) {
             const wordObjectList = response.data.split(' || ').filter(obj => obj).map(wordObj => wordObj = JSON.parse(wordObj));
             console.warn('GOT LIST', wordObjectList);
+            wordObjectList.forEach(wordObj => {
+              if (wordObj.clues) {
+                wordObj.clues = JSON.parse(wordObj.clues);
+                wordObj.clues.forEach(clue => {
+                  clue = clue.replace(/`/g, "'");                
+                  clue = clue.replace(/|/g, "\"");                
+                });
+              }
+            })
+            this.fullWordList[length] = wordObjectList;
             resolve(wordObjectList);
           } else {
             console.error('COULD NOT GET WORD LIST OF LENGTH', length);
           }
         });
-      });
+      });    
     },
-    changeEditMode(e) {
+    async changeEditMode(e) {
       const newMode = e.target.id.split('-')[0];
-      this.selectedCellIndex = undefined;
+      this.selectedCell = undefined;
+      this.highlightedWords = [];
+      if (newMode === 'clues') {
+        let fullAcrossWords = this.wordsNeeded.across.filter(wordObj => !wordObj.word.includes('*'));
+        let fullDownWords = this.wordsNeeded.down.filter(wordObj => !wordObj.word.includes('*'));
+        fullAcrossWords.forEach(async wordObj => {        
+          console.log('we getting clue for across', wordObj.word)
+          let clueArr = await this.getClues(wordObj.word);
+          this.wordsNeeded.across[this.wordsNeeded.across.indexOf(wordObj)].clues = clueArr;
+        })
+        fullDownWords.forEach(async wordObj => {        
+          console.log('we getting clue for down', wordObj.word)
+          let clueArr = await this.getClues(wordObj.word);
+          this.wordsNeeded.down[this.wordsNeeded.down.indexOf(wordObj)].clues = clueArr;          
+        })
+        
+      }
       console.warn('changing to', newMode)
-      this.$store.commit('changeEditMode', newMode)
-      // this.editMode = newMode;
+      requestIdleCallback(() => {
+        this.$store.commit('changeEditMode', newMode);
+        console.log('wordsNeeded now', this.wordsNeeded)
+      })
+      // this.$store.commit('changeEditDirection', 'across');
     },
     changeDiagram(newDiagram) {
       this.showingModal = undefined;
@@ -720,7 +927,7 @@ export default {
       requestIdleCallback(() => {
         // this.currentDiagram = newDiagram;
         this.addCellLabels();
-        this.violatingCells = this.getViolatingCells(this.getWordsNeeded());
+        this.getViolatingCells(this.getWordsNeeded());
         this.offensiveQuotient = gridScanner.getGridAttribute(newDiagram.cells, 'offensive');
       });
     },
@@ -787,9 +994,10 @@ export default {
       return coordArray;
     },
     handleCellFlip(e) {
+      let startTime = window.performance.now();
       const clickedIndex = e.target.id.split('-')[1];
-      const cellCoords = { row: this.cellGrid.flat()[clickedIndex].row, column: this.cellGrid.flat()[clickedIndex].column, };
-      const newCellGrid = [...this.cellGrid];
+      const cellCoords = { row: this.cellGrid.flat()[clickedIndex].row, column: this.cellGrid.flat()[clickedIndex].column };
+      const newCellGrid = this.cellGrid;
       const cellObject = newCellGrid[cellCoords.row][cellCoords.column];
       const newShadedStatus = !cellObject.shaded;
       cellObject.shaded = newShadedStatus;
@@ -801,23 +1009,67 @@ export default {
         this.addCellLabels();
         let needed = this.getWordsNeeded();
         this.violatingCells = this.getViolatingCells(needed);
-        const startTime = window.performance.now();
-        // this.contiguous = boardValidator.checkIfContiguous(newCellGrid, newCellGrid.flat());
-        this.getContiguous(newCellGrid).then((contiguous) => {
-          this.contiguous = contiguous;
-          console.warn('worker for getContiguous took', window.performance.now() - startTime);
-          this.offensiveQuotient = gridScanner.getGridAttribute(newCellGrid, 'offensive');
-        });
+        this.themeWords = this.getThemeWords(needed);
+        this.contiguous = boardValidator.checkIfContiguous(newCellGrid, newCellGrid.flat());
+        this.offensiveQuotient = gridScanner.getGridAttribute(newCellGrid, 'offensive');
+        // this.getContiguous(newCellGrid).then((contiguous) => {
+        //   this.contiguous = contiguous;
+        //   console.warn('worker for getContiguous took', window.performance.now() - startTime);
+        // });
       });
     },
     handleCellSelect(e) {
+      console.log('currently selected is', this.selectedCell)
+      const allCells = this.cellGrid.flat();
       const clickedIndex = parseInt(e.target.id.split('-')[1]);
-      if (![...this.cellGrid].flat()[clickedIndex].shaded) {
-        this.selectedCellIndex = clickedIndex;
+      const numbered = allCells[clickedIndex].number;
+      let rootWords = this.getRootWords(clickedIndex);
+      console.warn('GOT ROOTS', rootWords);
+      if (!allCells[clickedIndex].shaded) {
+        if (!this.selectedCell || clickedIndex !== this.selectedCell.index) {
+          this.highlightedWords = [];
+          // this.selectedCell.index = clickedIndex;
+          let newSelected = allCells[clickedIndex]
+          console.warn('chaning to index', clickedIndex, newSelected);
+          this.selectedCell = newSelected;
+          if (numbered) {
+            if (rootWords.down) {   
+              if (rootWords.down.letterIndexes[0] === clickedIndex) {           
+                this.$store.commit(`changeEditDirection`, `down`);
+              }
+              this.highlightedWords.push(rootWords.down)
+            }
+            if (rootWords.across) {
+              if (rootWords.across.letterIndexes[0] === clickedIndex) {
+                this.$store.commit(`changeEditDirection`, `across`);
+              }
+              this.highlightedWords.push(rootWords.across)
+            }            
+          } else {
+            for (let direction in rootWords) {
+              this.highlightedWords.push(rootWords[direction]);
+            }
+          }
+          console.warn('SELECTED cell', this.selectedCell)
+        } else {
+          console.error('clicked when already selected');
+          if (numbered) {
+            const currentEditDirection = this.$store.state.editDirection;
+            if (currentEditDirection === 'across' && rootWords.down && rootWords.down.letterIndexes[0] === clickedIndex) {
+              this.$store.commit(`changeEditDirection`, `down`);
+            }
+            if (currentEditDirection === 'down' && rootWords.across && rootWords.across.letterIndexes[0] === clickedIndex) {
+              this.$store.commit(`changeEditDirection`, `across`);
+            }
+          }
+          // this.$store.commit(`changeEditDirection`, this.$store.state.editDirection === `across` ? `down` : `across`)
+        }
       }
     },
     addCellLabels(cellGrid) {
-      let grid = cellGrid ? JSON.parse(JSON.stringify(cellGrid)) : JSON.parse(JSON.stringify([...this.cellGrid]));
+      // console.log('ADDCELLLABELS', Date.now())
+      let allChecked = this.$store.state.puzzleOptions.rules.allChecked;
+      let grid = cellGrid ? JSON.parse(JSON.stringify(cellGrid)) : JSON.parse(JSON.stringify(this.cellGrid));
       const start = window.performance.now();
       const updatedCells = grid;
       const totalCells = updatedCells.flat().length;
@@ -829,11 +1081,37 @@ export default {
           let numbered;
           if (cell.shaded) {
             // make the cells below and to the right numbered
-            numberedIndexes.push(cellTotalIndex + this.boardSize.width);
-            numberedIndexes.push(cellTotalIndex + 1);
-          } else if (r === 0 || c === 0 || numberedIndexes.includes(cellTotalIndex)) {
-            numbered = true;
-            onNumberedCell++;
+            // do not count 1-word spaces if !allChecked
+            if (!allChecked) {
+              let twoAwayDown = grid[r + 2] && grid[r + 2][c];
+              let twoAwayRight = grid[r][c + 2];
+              if (twoAwayDown && !twoAwayDown.shaded) {
+                numberedIndexes.push(cellTotalIndex + this.boardSize.width);
+              }
+              if (twoAwayRight && !twoAwayRight.shaded) {
+                numberedIndexes.push(cellTotalIndex + 1);
+              }
+            } else {
+              numberedIndexes.push(cellTotalIndex + this.boardSize.width);
+              numberedIndexes.push(cellTotalIndex + 1);
+            }
+
+          } else if ((r === 0 || c === 0) || numberedIndexes.includes(cellTotalIndex)) {
+            let isNumbered = true;
+            if (!allChecked)  {
+              if (r === 0 && grid[r + 1] && grid[r + 1][c].shaded) {
+                isNumbered = false;
+                numberedIndexes.splice(1, numberedIndexes.indexOf(cellTotalIndex));
+              }
+              if (c === 0 && grid[r][c + 1].shaded) {
+                isNumbered = false;
+                numberedIndexes.splice(1, numberedIndexes.indexOf(cellTotalIndex));
+              }
+            }
+            if (isNumbered) {
+              numbered = true;
+              onNumberedCell++;
+            }
           }
           const newCell = { ...cell };
           newCell.number = numbered ? onNumberedCell : null;
@@ -934,40 +1212,105 @@ export default {
     cancelGeneration() {
       if (this.generating) {
         this.generating = false;
-        this.onLayer = 0;
-        
+        this.onLayer = 0;        
+      }
+    },
+    getRootWords(cellIndex, needed) {
+      const wordsNeeded = needed || this.wordsNeeded;
+      let roots = {};
+      console.warn('this.wordsNeed is', wordsNeeded)
+      for (let wordDirection in wordsNeeded) {
+        let wordList = wordsNeeded[wordDirection];
+        wordList.forEach(wordObj => {
+          if (!roots[wordDirection] && wordObj.letterIndexes.includes(cellIndex)) {
+            roots[wordDirection] = wordObj;
+          };          
+        })
+      };
+      return roots;
+    },
+    getThemeWords(wordsNeeded) {
+      let themeWords = [
+        [],
+        []
+      ];
+      let wordArray = Object.values(wordsNeeded).flat().sort((a, b) => b.word.length - a.word.length);
+      let longest = wordArray[0].word.length;
+      let longestQuantity = wordArray.filter(wordObject => wordObject.word.length === longest).length
+      let shortest = wordArray[wordArray.length - 1].word.length;
+      let secondLongest = wordArray.filter(wordObject => wordObject.word.length !== longest)[0].word.length;
+      let longestMargin = longest - secondLongest;
+      let secondLongestMargin = secondLongest - shortest;
+      let secondLongestQuantity = wordArray.filter(wordObject => wordObject.word.length === secondLongest).length
+      if (this.boardSize.width / longest > 1.75) {
+        longestMargin = undefined;
+        console.error('longest too short to be a theme word', longest)
+      }
+      if (!longestMargin || this.boardSize.width / secondLongest > 2) {
+        console.error('secondLongest too short to be a theme word', secondLongest)
+        secondLongestMargin = undefined;
+      }
+      wordArray.forEach(wordObject => {
+        let wordLength = wordObject.word.length;
+        if (!themeWords.flat().includes(wordObject)) {
+          if (longestQuantity <= 4 && longestMargin && wordLength === longest) {
+            themeWords[0].push(wordObject);
+          }
+          // if (longestQuantity <= 4 && secondLongestQuantity <= 4 && longestQuantity <= 2 && secondLongestQuantity <= 4 && secondLongestMargin && wordLength === secondLongest) {
+          //   themeWords[1].push(wordObject);
+          // }
+        }
+      });
+      return themeWords;
+    },
+    getWordsForCell(cellIndex, wordsNeeded) {
+      let words = {
+        across: wordsNeeded.across.filter(wordObj => wordObj.letterIndexes.includes(cellIndex))[0],
+        down: wordsNeeded.down.filter(wordObj => wordObj.letterIndexes.includes(cellIndex))[0],
       }
     },
     generateNewBoard(instant) {
       let genStart = window.performance.now();
       let canceled = false;
+      let viableCells = this.cellGrid.flat().filter(cell => !cell.shaded && !cell.letter);
       // this.clearBoard();
       this.generating = true;
-      this.blackness = 0;
-      this.previousBlackness;
+      this.buildQueue.length = 0;
+      let blackness = 0;
+      let previousBlackness;
       let newGrid;
       // let timeout = this.rules.blackRate * 3 * (3 - this.symmetry)
-      let timeout = 300;
+      let timeout = 3000;
       this.count = 0;
       this.redundant = 0;
-      this.growBoard = (baseGrid) => {
-        this.count++
-        const grid = this.generateLayer(baseGrid);
-        this.previousBlackness = this.blackness;
-        this.blackness = this.getPercentBlack(grid);  
-        this.cellGrid = grid;
+      this.growBoard = (baseGrid, skipRender) => {
+        this.count++;
+        let generated = this.generateLayer(baseGrid, viableCells);
+        const grid = generated.grid;
+        const changed = viableCells.length !== generated.viableCells.length;
+        viableCells = generated.viableCells.filter(cell => !cell.shaded); 
+        // this.previousBlackness = this.blackness;
+        blackness = this.getPercentBlack(grid);  
+        if (skipRender) {
+          this.cellGrid = grid;
+        }
         let tooRedundant = this.redundant >= timeout;
         let timedOut = this.count >= timeout;
-        let needsBlack = this.blackness < this.rules.blackRate;
-        if (this.generating && !tooRedundant && !timedOut && needsBlack) {
-          if (this.blackness !== this.previousBlackness) {
-            requestAnimationFrame(() => {
-              this.growBoard(grid)
+        let enoughBlack = blackness >= this.rules.blackRate;
+        let failed = viableCells.length === 0;
+        if (this.generating && !tooRedundant && !timedOut && !enoughBlack) {   
+          if (true) {            
+            requestAnimationFrame(() => {              
+              this.growBoard(grid, changed);             
             });
+            // setTimeout(() => {              
+            //   this.growBoard(grid);             
+            // }, 650);
           } else {
             this.redundant++
+            console.error(this.count, 'redundant!')
             requestIdleCallback(() => {
-              this.growBoard(grid)
+              this.growBoard(this.cellGrid, true);             
             });
           }
         } else {
@@ -978,26 +1321,33 @@ export default {
           console.warn('board generated in', (window.performance.now() - genStart).toFixed(2));
           console.warn('count was', this.count);
           console.warn('redundant was', this.redundant);
-          requestAnimationFrame(async () => {
+          requestAnimationFrame(() => {            
             newGrid = this.addCellLabels(grid);
-            console.log('we final', newGrid)
             let needed = this.getWordsNeeded(newGrid);
             this.wordsNeeded = needed;
             this.violatingCells = this.getViolatingCells(needed);
-            let contiguous = await this.getContiguous(newGrid);
-            console.log('got cont?', contiguous)
+            let themeWords = this.getThemeWords(needed);
+            this.themeWords = themeWords;
+            let contiguous = boardValidator.checkIfContiguous(newGrid, newGrid.flat());
             this.contiguous = contiguous;
             this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');            
             this.generating = false;              
             this.cellGrid = newGrid;
-            this.onLayer = 0;
+            this.onLayer = 0;            
             console.error('stopped at timedOut', timedOut);
             console.error('stopped at tooRedundant', tooRedundant);
-            console.error('stopped at needsBlack', needsBlack);
+            console.error('stopped at enoughBlack', enoughBlack);
             console.error('stopped at canceled', canceled);
+            console.error('stopped at failed', failed);
+            // setTimeout(() =>{
+            //   requestAnimationFrame(() => {
+            //     this.cellGrid.forEach(row => row.map(cell => cell.letter = ''))
+            //     viableCells.forEach(cell => this.cellGrid[cell.row][cell.column].letter = 'V') 
+            //   })
+            // }, 500)
           });
-          return grid;
         }
+        // return grid;
       }
       if (instant === true) {
         // while (count < timeout && blackness < this.rules.blackRate) {
@@ -1024,151 +1374,276 @@ export default {
         //   console.error('stopped at blackness, count', blackness, count);
         //   this.generating = false;
         // });
-      } else {  
+      } else {          
         this.growBoard(this.cellGrid);
         // let newGrid = this.cellGrid;
       }
     },
-    generateLayer(baseLayer) {
+    generateLayer(baseLayer, viableCells) {
+      let foundGoodCell = false;
       let newGrid = JSON.parse(JSON.stringify(baseLayer));
-      let limits = this.symmetry ? {
-        min: 0,
-        max: Math.floor(this.boardSize.width / this.symmetry)
-        // max: Math.floor(this.boardSize.width / 2)
-      } : {
-        min: 0,
-        max: this.boardSize.width
-      }
-
-      let choices = newGrid[this.onLayer].slice(limits.min, limits.max);
-      let unshaded = choices.filter(cell => !cell.shaded);
+      let newQueueItem = [];
       let violating = [];
-      let validOptions = [];
-      unshaded.forEach((cell, i) => {
-        let selectedCell = unshaded[i];
-        if (!newGrid[this.onLayer][i].shaded) {
-          let previousShaded = newGrid[this.onLayer][i].shaded;
-          newGrid[this.onLayer][i].shaded = true;
+      let newViableCells = viableCells.filter(cell => !cell.shaded).sort(() => Math.random() - 0.5);
+      for (let i = newViableCells.length - 1; i >= 0; i -= 1) {
+        let stillValidIfShaded = false;
+        let selectedCell = newViableCells[i];
+        if (newViableCells.includes(selectedCell)) {
+          let centerCell = selectedCell.row === Math.floor(this.boardSize.height / 2) && selectedCell.column === Math.floor(this.boardSize.width / 2);
+          let previousShaded = newGrid[selectedCell.row][selectedCell.column].shaded;
+          // shade the random cell
+          newGrid[selectedCell.row][selectedCell.column].shaded = true;
+          selectedCell.shaded = true;
+          newQueueItem.push(selectedCell);
+          // shade its mirrors, if any
           const mirrorCoords = this.getMirrorCoords(this.symmetry, {
             row: selectedCell.row,
             column: selectedCell.column
           });
-          mirrorCoords.forEach((coordSet) => {
-            const cellIndex = (coordSet.row * this.boardSize.height) + coordSet.column;
-            newGrid[coordSet.row][coordSet.column].previousShaded = newGrid[coordSet.row][coordSet.column].shaded;
-            newGrid[coordSet.row][coordSet.column].shaded = true;
-          });
+          if (!centerCell) {
+            mirrorCoords.forEach((coordSet) => {
+              const mirrorCell = newGrid[coordSet.row][coordSet.column];
+              mirrorCell.previousShaded = previousShaded;
+              mirrorCell.shaded = selectedCell.shaded;
+              newQueueItem.push(mirrorCell);
+            });
+          }
+
           newGrid = this.addCellLabels(newGrid);
           let needed = this.getWordsNeeded(newGrid);
-          newGrid.forEach(row => { row = row.map(cell => cell.number = '') })
-          violating = this.getViolatingCells(needed, true, true);
-          let offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
-          // let contiguous = boardValidator.checkIfContiguous(newGrid, newGrid.flat());
+          let enforceMax = false;
+          violating = this.getViolatingCells(needed, true, enforceMax);
+          newGrid.forEach(row => row.map(cell => cell.number = ''))
+     
           if (!violating.length) {
+            let offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
             if (offensiveQuotient < 50) {
-              // if (this.rules.contiguous && contiguous || !this.rules.contiguous) {
-                validOptions.push(selectedCell.column);
-              // } else {
-                // console.error('rejected for non-contiguous');
-              // }
+              let contiguous = boardValidator.checkIfContiguous(newGrid, newGrid.flat());
+              if (this.rules.contiguous && contiguous || !this.rules.contiguous) {
+                foundGoodCell = true;         
+                break;          
+              } else {
+                console.error(selectedCell.index, i, 'rejected for non-contiguous');
+              }
             } else {
-              console.error('rejected for offensive');
+              console.error(selectedCell.index, i, 'rejected for offensive');
             }
+          } else {
+            
           }
-          newGrid[this.onLayer][i].shaded = previousShaded;
-          mirrorCoords.forEach((coordSet) => {
-            // const cellIndex = (coordSet.row * this.boardSize.height) + coordSet.column;
-            newGrid[coordSet.row][coordSet.column].shaded = newGrid[coordSet.row][coordSet.column].previousShaded;            
-          });          
-          violating = [];
+          if (foundGoodCell) {
+            
+          } else {            
+                    
+            // unshade the test cells
+            newGrid[selectedCell.row][selectedCell.column].shaded = previousShaded;
+            newViableCells.splice(i, 1);
+            if (!centerCell) {
+                mirrorCoords.forEach((coordSet) => {
+                  const mirrorCell = newGrid[coordSet.row][coordSet.column];
+                  mirrorCell.shaded = previousShaded;
+                  
+                });
+            }
+            newQueueItem.length = 0;
+          }
         }
-      });
-      let advanceAmount = randomInt(0,2);
-      if (!validOptions.length) {
-        advanceAmount = 1;
+      }
+      // console.log('returning newViableCells:', newViableCells);
+
+       requestAnimationFrame(() => {
+        // this.cellGrid.forEach(row => row.map(cell => cell.letter = ''))
+        // viableCells.forEach(cell => this.cellGrid[cell.row][cell.column].letter = 'V') 
+      })
+      
+      if (foundGoodCell) {
+        this.buildQueue = [...this.buildQueue, newQueueItem];
+        return {grid: newGrid, viableCells: newViableCells};
       } else {
-        let randomIndex = randomInt(0, validOptions.length - 1);
-        let cellToShade = validOptions[randomIndex];
-        newGrid[this.onLayer][cellToShade].shaded = true;
-        const mirrorCoords = this.getMirrorCoords(this.symmetry, {
-            row: this.onLayer,
-            column: cellToShade
-          });
-        mirrorCoords.forEach((coordSet) => {
-          const cellIndex = (coordSet.row * this.boardSize.height) + coordSet.column;
-          newGrid[coordSet.row][coordSet.column].shaded = true;
-        });
-        validOptions = [];        
+        // if (this.symmetry > 0) {
+        //   console.error('TRYING SYMMETRY', this.symmetry - 1)
+        //   this.symmetry = this.symmetry - 1;
+        //   return {grid: newGrid, viableCells: newViableCells};
+        // } else {
+          this.generating = false;
+          console.log('set generating false!, newViableCells length is', newViableCells.length)
+          return {grid: newGrid, viableCells: newViableCells};
+        // }
       }
-      // this.onLayer = this.onLayer - 1;
-      // if (this.onLayer < 0) {
-      //   this.onLayer = limits.max;
+
+     
+      // let advanceAmount = randomInt(0,2);
+      // if (!validOptions.length) {
+      //   advanceAmount = 1;
+      // } else {
+      //   let randomIndex = randomInt(0, validOptions.length - 1);
+      //   let cellToShade = validOptions[randomIndex];
+      //   newGrid[this.onLayer][cellToShade].shaded = true;
+      //   const mirrorCoords = this.getMirrorCoords(this.symmetry, {
+      //       row: this.onLayer,
+      //       column: cellToShade
+      //     });
+      //   mirrorCoords.forEach((coordSet) => {
+      //     const cellIndex = (coordSet.row * this.boardSize.height) + coordSet.column;
+      //     newGrid[coordSet.row][coordSet.column].shaded = true;
+      //   });
+      //   validOptions = [];        
       // }
-      this.onLayer = this.onLayer + advanceAmount;
-      if (this.onLayer > limits.max - 1) {
-        this.onLayer = 0;
-      }
-      return newGrid;
+      // // this.onLayer = this.onLayer - 1;
+      // // if (this.onLayer < 0) {
+      // //   this.onLayer = limits.max;
+      // // }
+      // this.onLayer = this.onLayer + advanceAmount;
+      // if (this.onLayer > limits.max - 1) {
+      //   this.onLayer = 0;
+      // }
+      // return newGrid;
     },
-    getViolatingBoard(iterations, feature, minScore, maxScore) {
-      let st = window.performance.now();
-      const offensiveScores = [];
-      const newAuditList = [];
+    getOffensive() {
+      let rando = randomInt(0, 3);
+      let min = 95;
+      let max = 100;
+      if (!rando) {
+        min = 0;
+        max = 5;
+      }
       this.generating = true;
-      let sortedScores = [];
-      requestIdleCallback(() => {
-        // for (let i = 0; i < iterations; i++) {
-          while (this.generating && !sortedScores.length) {
-            const randomPattern = this.getRandomBinaryPattern(this.rules.blackRate);
+      requestAnimationFrame(() => {
+        this.getViolatingBoard('offensive', min, max).then(passingGrid => {        
+          this.generating = false;
+          this.offensiveQuotient = passingGrid.score;
+          this.cellGrid = passingGrid.grid;
+        });
+      })
+    },
+    getViolatingBoard(feature, minScore, maxScore) {
+      return new Promise(resolve => {
+        let st = window.performance.now();
+        const offensiveScores = [];
+        const newAuditList = [];
+        let passingGrid;
+        let tries = 0;
+        requestAnimationFrame(() => {
+        let startTime = window.performance.now();
+        let elapsed = 0;
+          while (this.generating && elapsed < 7000 && !passingGrid) {
+            const randomBlack = this.rules.blackRate;
+            const randomPattern = this.getRandomBinaryPattern(randomBlack);
             const newGrid = this.buildArrayFromGridString(randomPattern, this.boardSize.width, this.boardSize.height);
             const gridScore = gridScanner.getGridAttribute(newGrid, feature);
-            // console.warn('we at randomPattern', randomPattern)
-            // console.warn('we at newGrid', newGrid)
-            // console.warn('we at gridScore', gridScore)
-            offensiveScores.push({ grid: newGrid, score: gridScore });
-            sortedScores = offensiveScores.filter(scoreSet => scoreSet.score >= minScore && scoreSet.score <= maxScore);
-            requestIdleCallback(() => {
-              this.cellGrid = newGrid;
-            });          
+            // console.warn('we at randomPattern', tries)
+            // console.warn('we at gridScore, min, max', gridScore, minScore, maxScore)
+            if (gridScore >= minScore && gridScore <= maxScore) {
+              passingGrid = { grid: newGrid, score: gridScore };
+            } else {
+              tries += 1;
+              elapsed =  window.performance.now() - startTime;              
+              requestAnimationFrame(() => {
+              })
+              // this.cellGrid = newGrid;                
+            }
           }
-        console.log('we got offensive?', sortedScores.length);
+          // passingGrids.forEach((scoreSet, i) => {
+          //   const diagramObj = {};
+          //   diagramObj.cells = scoreSet.grid;
+          //   diagramObj.width = this.boardSize.width;
+          //   diagramObj.height = this.boardSize.height;
+          //   diagramObj.percentBlack = 0;
+          //   diagramObj.offensivePercent = scoreSet.score;
+          //   // console.log('puishing diagramObj', diagramObj)
+          //   newAuditList.push(diagramObj);
+          // });      
+          // passingGrids = passingGrids.sort((a, b) => b.offensivePercent - a.offensivePercent);
+          // const reversedScores = [...sortedScores].reverse();
+          // for (let i = 0; i < 10; i++) {
+          //   const diagramObj = {};
+          //   diagramObj.cells = reversedScores[i].grid;
+          //   diagramObj.width = this.boardSize.width;
+          //   diagramObj.height = this.boardSize.height;
+          //   diagramObj.percentBlack = 0;
+          //   diagramObj.offensivePercent = reversedScores[i].score;
+          //   // console.log('puishing diagramObj', diagramObj)
+          //   newAuditList.push(diagramObj);
+          // }
 
-        // const sortedScores = offensiveScores.sort((a, b) => b.score - a.score);
-        sortedScores.forEach((scoreSet, i) => {
-          const diagramObj = {};
-          diagramObj.cells = scoreSet.grid;
-          diagramObj.width = this.boardSize.width;
-          diagramObj.height = this.boardSize.height;
-          diagramObj.percentBlack = 0;
-          diagramObj.offensivePercent = scoreSet.score;
-          // console.log('puishing diagramObj', diagramObj)
-          newAuditList.push(diagramObj);
-        });      
-        // const reversedScores = [...sortedScores].reverse();
-        // for (let i = 0; i < 10; i++) {
-        //   const diagramObj = {};
-        //   diagramObj.cells = reversedScores[i].grid;
-        //   diagramObj.width = this.boardSize.width;
-        //   diagramObj.height = this.boardSize.height;
-        //   diagramObj.percentBlack = 0;
-        //   diagramObj.offensivePercent = reversedScores[i].score;
-        //   // console.log('puishing diagramObj', diagramObj)
-        //   newAuditList.push(diagramObj);
-        // }
-        const topScorer = sortedScores[0];
-        this.offensiveQuotient = topScorer.score;
-        let newGrid = this.addCellLabels(topScorer.grid)
-        let needed = this.getWordsNeeded(newGrid);
-        this.violatingCells = this.getViolatingCells(needed);
-        this.cellGrid = newGrid;
-        this.auditList = newAuditList;
-        console.warn('screened', iterations, 'grids in', window.performance.now() - st);
-        console.warn('compiled', this.auditList.length, 'samples');
-        this.generating = false;
+          console.warn('screened', tries, 'grids in', window.performance.now() - st);        
+          resolve(passingGrid);
+
+        });
+
+        // this.offensiveQuotient = passingGrid.score;
+        // this.cellGrid = passingGrid.grid;
+
+        // this.auditList = newAuditList;
       });
     },
-    getRandomBoard(blackPercent) {
 
+    async clearLetters(e, shade) {
+      this.cellGrid.forEach((row, r) => {
+        row.map((cell, c) => {
+          return cell.letter = '';
+        });
+      });
+      this.violatingCells.length = 0;
+      this.getWordsNeeded();
+    },
+    async discoverNewWords() {
+      let list = await this.getWordList(11);
+      let count = 0;
+      list.forEach((wordObj, i) => {
+        // console.log('clues?', wordObj.clues)
+        if (!wordObj.clues) {
+          count += 1;
+          console.log(wordObj.word, 'got no clues')
+          let clueArr = wordObj.clues || [];
+          if (wordObj.clue) {
+            let clue = wordObj.clue.replace(/'/g, "`");
+            // clue = wordObj.clue.replace(/"/g, "|");
+            console.log('prepared clue', clue)
+            clueArr.push(clue)
+          }
+          setTimeout(() => {
+            DB.saveClue(wordObj.word, clueArr).then(resp => {
+              console.warn(wordObj.word, 'resp', resp.data)
+            });
+          }, count * 250)        
+        }
+      });
+      // let newWords = [];
+      // let tries = 0;
+      // while(newWords.length < 20 && tries < 2) {
+      //   let discovered = await DB.discoverWords(12);
+      //   if (!discovered) {
+      //     tries += 1;
+      //   } else {
+      //     console.warn('DISCOVERED', discovered);
+      //     newWords.push(...discovered);
+      //     console.warn('newWords', newWords);
+      //   }
+      // }
+      // console.warn('----------- DONE ---------------')
+      // newWords.forEach(word => {
+      //   if (word.split('-').length > 1) {
+      //     console.log('HYPHENATED WORD', word);
+      //     let newWord = '';
+      //     word.split('-').forEach(piece => {
+      //       newWord += piece;
+      //     });
+      //     word = newWord;
+      //     console.log('created new word', newWord)
+      //   }
+      //   console.log('SAVING', word);
+      //   DB.saveWord(word).then((resp) => {
+      //     console.warn(word, resp)
+      //   });        
+      // })
+    },
+    async saveNewWord(newWord) {      
+      const saveResp = await DB.saveWord(newWord)
+      console.warn(newWord, saveResp);
+      const updateResp = await this.getWordList(newWord.length);
+      console.warn('updated!', updateResp)
+      this.showingModal = undefined;
     },
     clearBoard(e, shade) {
       if (e && this.generating) {
@@ -1183,7 +1658,7 @@ export default {
         updatedCells.forEach((row, r, rowsArray) => {
           updatedCells[r] = row.map((cell, c, cellArray) => {
             const newCell = { ...cell };
-            newCell.letter = '';
+            // newCell.letter = '';
             newCell.number = '';
             newCell.shaded = shade;
             newCell.selected = false;          
@@ -1195,6 +1670,8 @@ export default {
         this.cellGrid = updatedCells;
         this.addCellLabels();
         this.getWordsNeeded();
+        this.themeWords = [[], []];
+        this.highlightedWords = [];
         this.violatingCells = [];
         this.contiguous = true;
         this.offensiveQuotient = 0;
@@ -1214,7 +1691,7 @@ export default {
       // let cellString = this.getBinaryPattern([...this.cellGrid]);
       // let newGrid = this.buildArrayFromGridString()
       
-      // this.clearBoard(e, true);
+      this.clearBoard(e, true);
     },
     extractPuzzleFromImage(url, width, height) {
       const crosswordImage = document.getElementById('crossword-image');
@@ -1264,6 +1741,161 @@ export default {
         binaryArray[ind] = 1;
       });
       return binaryArray;
+    },
+    async wait(time) {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          resolve('blarghe')
+        }, time);
+      });
+    },
+    getChangedCells(oldBoard) {
+      const changedCells = this.cellGrid.flat().filter((cell, i) => {
+        return cell.letter !== oldBoard.flat()[i].letter
+      });
+      return changedCells
+    },
+    async fillBoard() {
+      const allCells = this.cellGrid.flat();
+      let currentRootCell = this.selectedCell ? this.selectedCell : allCells.filter(cell => cell.number === 1)[0];
+      this.selectedCell = currentRootCell;
+      this.$store.commit('changeEditDirection', 'across');
+      const choiceSequence = [];
+      const checkQueue = [{ direction: this.$store.state.editDirection, cellIndex: currentRootCell.index }];
+      let filledWords = { across: [], down: [] };
+      let iterations = 0;
+      let repetitions = 0;
+      let onWordIndex = { across: 0, down: 0 };
+      const limit = 225;
+      this.generating = true;
+      console.log('started');
+      while(this.generating && iterations < limit) {
+        iterations && await this.wait(3);
+        const oldBoard = JSON.parse(JSON.stringify(this.cellGrid));
+        const wordOptions = await this.findWord();
+        if (!wordOptions) {
+          console.error('NO WORDS FOUND FOR', currentRootCell.number, this.$store.state.editDirection);
+          let cellArr = this.wordsNeeded[this.$store.state.editDirection].filter(wordObj => wordObj.letterIndexes.includes(this.selectedCell.index))[0].letterIndexes;
+          console.log('cellArr', cellArr)
+          this.violatingCells.push(...cellArr)
+          break;
+        }
+        const foundWord = wordOptions[randomInt(0, wordOptions.length - 1)];
+        this.fillWithWord(foundWord.word, currentRootCell.number, this.$store.state.editDirection);
+            
+        // const changedCells = this.getChangedCells(oldBoard);
+        // console.log(foundWord.word, 'changed', changedCells);
+        // console.log('going for foundWord', foundWord)
+
+        this.$store.dispatch('toggleDirection');
+
+        // const needed = this.getWordsNeeded();
+        // changedCells.forEach(cell => {
+        //   let rootWords = this.getRootWords(cell.index, needed);
+        //   checkQueue.push({ direction: currentEditDirection, cellIndex: rootWords[currentEditDirection].letterIndexes[0]});        
+        // });
+
+        iterations += 1;
+
+        // const nextRootCellIndex = this.getRootWords(changedCells[onWordIndex].index)[this.$store.state.editDirection].letterIndexes[0];
+        let currentWordList = this.wordsNeeded[this.$store.state.editDirection];
+        let currentWord = currentWordList.filter(wordObj => wordObj.letterIndexes.includes(this.selectedCell.index))[0];
+
+        const nextRootCellIndex = currentWordList[onWordIndex[this.$store.state.editDirection]].letterIndexes[0];
+        console.log('nextrootcelli', nextRootCellIndex);
+        currentRootCell =  allCells[nextRootCellIndex];
+        if (onWordIndex[this.$store.state.editDirection] <  currentWordList.length) {
+          onWordIndex[this.$store.state.editDirection] += 1;
+        } else {
+          onWordIndex[this.$store.state.editDirection] = 0;
+        }
+        requestAnimationFrame(() => {
+          this.selectedCell = currentRootCell;
+        })
+      }
+      
+      this.generating = false;
+      if (iterations === limit) {
+        console.error('TIMED OUT!! -----------')
+      }
+      this.$store.commit('changeEditDirection', 'across');
+      this.selectedCell = undefined;
+      this.highlightedWords = [];
+      console.error('///////////////////////////////////////////')      
+    },
+
+    async fillBoard2() {
+      const allCells = this.cellGrid.flat();
+      const checkQueue = [];
+      let currentRootCell = allCells.filter(cell => cell.number === 1)[0];
+      this.selectedCell = currentRootCell;
+      let currentEditDirection = 'across';
+      this.$store.commit('changeEditDirection', currentEditDirection);
+      let filledWords = []; // index in this.wordsNeeded
+      let iterations = 0;
+      let repetitions = 0;
+      const limit = 600;
+      this.generating = true;
+      while(this.generating && iterations < limit) {
+        // get a word for the current selectedCell and editDirection
+        let foundWord = await this.findWord();
+        if (!foundWord) {
+          console.error('///////////////// NO WORD FOUND FOR', currentRootCell.number, currentEditDirection);
+          break;
+        }
+        console.warn('---- iteration', iterations, 'found word', foundWord.toUpperCase(), 'for', this.selectedCell.number, currentEditDirection);
+        // find the cell at the end of that word
+        const newestWord = this.wordsNeeded[currentEditDirection].filter(wordObj => wordObj.number === currentRootCell.number)[0];
+        const neededIndex = this.wordsNeeded[currentEditDirection].indexOf(newestWord);
+        let rootFromIndex = newestWord.word.length - 1;
+        if (filledWords.includes(neededIndex)) {
+          console.error('///////// tried same word again for', repetitions, 'times');
+          repetitions += 1;
+          if (repetitions === 12) {
+            console.error('TOO MANY SAME TIME :(');
+            break;
+          }
+          rootFromIndex = 0;
+        } else {
+          repetitions = 0;
+          filledWords.push(neededIndex)
+        }
+        const wordEndCell = allCells[newestWord.letterIndexes[rootFromIndex]];
+
+        console.log('rootFromIndex cell is', wordEndCell.row, wordEndCell.column, wordEndCell.number, wordEndCell.letter)
+
+        // turn
+        currentEditDirection = currentEditDirection === 'across' ? 'down' : 'across';    
+        console.error('TURNING', currentEditDirection);
+        this.$store.commit('changeEditDirection', currentEditDirection);
+
+        // get that cell's root word from new direction
+        const endRootWord = this.getRootWords(wordEndCell.index)[currentEditDirection];
+        if (!endRootWord) {
+          console.error(currentEditDirection, 'had no endRootWord /////////////////////////');
+          break;
+        }
+        console.error(currentEditDirection, 'root word of word end cell of', foundWord.toUpperCase(), 'is', endRootWord.number, currentEditDirection);
+        // change selected cell to that word's starting letter
+        const nextCellIndex = endRootWord.letterIndexes[0];
+
+        // requestIdleCallback(() => {
+          currentRootCell = allCells[nextCellIndex];
+          this.selectedCell = currentRootCell;
+        // });
+        console.log('filled', filledWords.length, 'words')
+        iterations += 1;
+      }
+      this.generating = false;
+      if (iterations === limit) {
+        console.error('TIMED OUT!! -----------')
+      }
+      this.selectedCell = undefined;
+      this.highlightedWords = [];
+      console.error('///////////////////////////')
+      console.error('/////////////////////////////////')
+      console.error('//////////////////////////////////////')
+      console.error('///////////////////////////////////////////')      
     },
     async scanBoardForImage() {
       // let boardDiv = document.getElementById('puzzle-board');
@@ -1340,10 +1972,22 @@ export default {
     var(--header-height)
     100vmin
     1fr
-    /* var(--footer-height) */
   ;
-  /* overflow-y: auto; */  
+  /* overflow-y: auto; */
+  align-items: flex-end;
+  transition: opacity 600ms ease;
 }
+.home.clues-mode {
+  grid-template-rows:
+    var(--header-height)
+    1fr
+    auto
+  ;
+}
+.home:not(.ready) {
+  opacity: 0;
+}
+
 #board-canvas {
   position: absolute;
   /* width: 66px;
@@ -1365,12 +2009,111 @@ export default {
 }
 .board-area {
 	height: 100%;
-  /* width: 100%; */
   align-self: flex-start;
 	display: flex;
 	flex-direction: column;
-	align-items: center;
+  align-items: center;
 	justify-content: center;
+}
+.home.clues-mode .board-area {
+  overflow: auto;
+  justify-content: flex-start;
+}
+.down-caret {
+  width: 0; 
+  height: 0; 
+  border-left: calc(var(--header-height) / 4) solid transparent;
+  border-right: calc(var(--header-height) / 4) solid transparent;  
+  border-top: calc(var(--header-height) / 4) solid var(--secondary-text-color);
+}
+.clue-display {
+  color: var(--secondary-text-color);
+  font-weight: bold;
+  width: 100%;
+  flex-grow: 1;
+  justify-self: flex-start;
+  position: relative;
+}
+.expand-button {
+  font-weight: bold;
+  color: var(--main-text-color);
+  height: var(--header-height);
+  border: 1px solid var(--secondary-text-color);
+  padding: calc(var(--main-padding) / 2);
+  background-color: unset;
+  border-radius: calc(var(--main-padding) / 4);
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 0.75rem;
+  background-color: var(--button-color)
+}
+.expand-button > .down-caret {
+  margin-left: 5%;
+}
+.clue-display h1 {
+  font-size: 1.5rem;
+}
+.clue-display h1:nth-of-type(2) {
+  font-size: 1.5rem;
+  margin-top: var(--header-height);
+}
+.clue-display > header {
+  position: relative;
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;  
+}
+.list-area {
+  padding: var(--main-padding);
+}
+.clue-display .clue-list {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.clue-list > .word-clue-entry {
+  padding: calc(var(--main-padding) / 2);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto 1fr;
+  /* align-items: center; */
+  /* border-bottom: 1px solid var(--secondary-text-color); */
+}
+.word-clue-entry > div:nth-child(1) {  
+  width: 2rem;
+  grid-row-start: 1;
+  grid-column-start: 1;
+  /* grid-column-end: span 3; */
+  align-self: center;
+}
+.word-clue-entry > div:nth-child(2) {
+  align-self: center;
+  grid-row-start: 1;
+  grid-column-start: 2;
+  grid-column-end: span 2;
+  font-size: 1.5rem;
+}
+.word-clue-entry > div:nth-child(3) {
+  font-weight: normal;
+  grid-row-start: 2;
+  grid-column-start: 2;
+  padding: calc(var(--main-padding) / 2);
+  padding-left: 0;
+}
+.word-clue-entry > button:active {
+  background-color: #333;
+}
+.word-clue-entry > button {
+  grid-row-start: 2;
+  grid-column-start: 3;
+  display: flex;
+  justify-content: space-between
+}
+.direction-label {
+  border-bottom: 1px solid var(--secondary-text-color);
 }
 @media (orientation: landscape) {
 	.board-area {
