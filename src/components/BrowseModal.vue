@@ -226,7 +226,7 @@ export default {
 
 	box-shadow: 1px 1px calc(var(--main-padding) / 2) #00000066,
 		-1px -1px calc(var(--main-padding) / 2) #00000066;
-  z-index: 1;
+  z-index: 3;
 }
 .browse-modal::before {
   position: fixed;

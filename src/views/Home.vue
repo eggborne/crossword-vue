@@ -5,12 +5,13 @@
       :handleClickToSave='$store.state.editMode === `diagram` ? handleClickToSaveDiagram : handleClickToSavePuzzle'
       :handleClickPrevious='handleClickPrevious'
       :handleClickNext='handleClickNext'
-      :handleClickTrain='discoverNewWords'
+      :handleClickTrain='handleClickTrain'
     />
-    <div v-if='$store.state.editMode !== `clues`' class='board-area'>
+    <div v-cloak v-if='$store.state.editMode !== `clues`' class='board-area'>
       <Board
         :cellGrid='cellGrid'
         :highlightedWords='highlightedWords'
+        :viableWords='viableWords'
         :handleCellClick='
         $store.state.editMode === `diagram` ? handleCellFlip :
         $store.state.editMode === `puzzle` ? handleCellSelect : null
@@ -18,16 +19,15 @@
         :selectedCell='selectedCell'
         :violatingCells='violatingCells'
         :themeWords='themeWords'
-        :changeLetter='changeLetter'
       />
     </div>
     <div v-else class='board-area'>
       <div class='clue-display'>
-        <header>Words and clues</header>
-        <div v-if='this.fullWordsFound' class='list-area'>
+        <!-- <header>Words and clues</header> -->
+        <div class='list-area'>
           <h1 class='direction-label'>Across</h1>
           <div class='clue-list across'>
-            <div class='word-clue-entry' v-for='wordObj in this.wordsNeeded.across.filter(wordObj => !wordObj.word.includes(`*`))' :key='wordObj.id'>
+            <div class='word-clue-entry' v-for='wordObj in this.wordsNeeded.across.filter(wordObj => wordObj.word || !wordObj.word.includes(`*`)).sort((a, b) => a.number - b.number )' :key='wordObj.id'>
               <div>{{ wordObj.number }}.</div>
               <div>{{ wordObj.word.toUpperCase() }}</div>
               <div>{{ wordObj.clues[wordObj.selectedClue] }}</div>
@@ -38,7 +38,17 @@
             </div>
           </div>
           <h1 class='direction-label'>Down</h1>
-
+          <div class='clue-list down'>
+            <div class='word-clue-entry' v-for='wordObj in this.wordsNeeded.down.filter(wordObj => wordObj.word || !wordObj.word.includes(`*`)).sort((a, b) => a.number - b.number )' :key='wordObj.id'>
+              <div>{{ wordObj.number }}.</div>
+              <div>{{ wordObj.word.toUpperCase() }}</div>
+              <div>{{ wordObj.clues[wordObj.selectedClue] }}</div>
+              <button @pointerdown='() => handleClickToSaveClue(wordObj)' class='expand-button'>
+                {{ wordObj.clues.length ? `CHANGE` : `ADD` }} CLUE
+                <!-- <div class='down-caret'></div> -->
+              </button>
+            </div>
+          </div>
         </div>        
       </div>
     </div>
@@ -64,21 +74,35 @@
       :handleClickToBrowse='handleClickToBrowse'
       :handleClickChooseDiagram='changeDiagram'
       :handleClickGenerate='generateNewBoard'
+      :handleClickToViewChoices='handleClickToViewChoices'
       :cancelGeneration='cancelGeneration'
       :handleClickRules='() => showingModal = `rules`'
-      :findWord='findWord'
-      :fillBoard='fillBoard'
+      :handleClickValidate='validateWordSpaces'
+      :handleClickKey='handleClickKey'
+
+      :findWord='findViableWord'
+      :fillBoard='fill'
       :themeWords='themeWords'
+      :completeWords='usedWords.length'
+      :doubleRootCells='doubleRootCells'
+      :currentFillOptions='currentFillOptions'
+      :totalFillOptionAmount='totalFillOptionAmount'
+      :loadingMessage='loadingMessage'
+      :decisionQueue='decisionQueue'
+      :logItems='logItems'
+      :iterations='iterations'
+      :viableCellAmount='viableCellAmount'
     />
     <div v-if='showingModal' id='dark-mask'></div>
     <SaveModal
-      :type='$store.state.savingType'
       v-if='showingModal === `save` || showingModal === `clues`'
+      :type='$store.state.savingType'
       :handleSaveDiagram='handleSaveDiagram'
       :handleSaveWord='saveNewWord'
       :handleClickCancelSave='handleClickCancelModal'
       :handleDeleteClue='handleDeleteClue'
       :wordObj='$store.state.selectedWord'
+      :problemPatterns='problemPatterns'
     >
     {{ saveMessage }}
     </SaveModal>
@@ -96,7 +120,17 @@
       :handleClickDeleteDiagram='handleClickDeleteDiagram'
       :handleClickToLabel='handleClickToLabel'
     />
+    <ChoicesModal
+      v-if='showingModal === `choices`'
+      :wordsNeeded='wordsNeeded'
+      :triedWordOptions='triedWordOptions'
+      :handleClickDone='handleClickCancelModal'
+      :selectedWord='selectedWord'
+    />
     <div id='model-display'></div>
+    <ActivityLog 
+      :logItems='logItems' 
+    />
     <!-- <canvas id='board-canvas'/> -->
     <!-- <img id='micro-board-image'/> -->
     <!-- <img id='crossword-image'/> -->
@@ -119,9 +153,11 @@ import ControlPanel from '../components/ControlPanel.vue';
 import RulesModal from '../components/RulesModal.vue';
 import BrowseModal from '../components/BrowseModal.vue';
 import SaveModal from '../components/SaveModal.vue';
+import ChoicesModal from '../components/ChoicesModal.vue';
 import BoardValidator from '../boardvalidator';
 import DiagramCreator from '../diagramcreator';
 import MicroBoard from '../components/MicroBoard.vue';
+import ActivityLog from '../components/ActivityLog.vue';
 
 import GridScanner from '../gridscanner';
 
@@ -137,6 +173,34 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
+const scrabbleScores = {
+    a:1,
+    b:3,
+    c:3,
+    d:2,
+    e:1,
+    f:4,
+    g:2,
+    h:4,
+    i:1,
+    j:8,
+    k:5,
+    l:1,
+    m:3,
+    n:1,
+    o:1,
+    p:3,
+    q:10,
+    r:1,
+    s:1,
+    t:1,
+    u:1,
+    v:4,
+    w:4,
+    x:8,
+    y:4,
+    z:10
+};
 export default {
   name: 'Home',
   data: () => ({
@@ -147,9 +211,10 @@ export default {
     fullWordList: [
       
     ],
+    viableCellAmount: 0,
     diagrams: undefined,
     boardSize: { width: 15, height: 15 },
-    symmetry: 2,
+    symmetry: 1,
     contiguous: true,
     currentDiagram: undefined,
     currentPuzzle: undefined,
@@ -158,7 +223,12 @@ export default {
       across: [],
       down: []
     },
-    highlightedWords: [],
+    doubleRootCells: [],
+    highlightedWords: {
+      across: [],
+      down: []
+    },
+    viableWords: [],
     options: {
       diagramSize: {
         name: 'diagramSize',
@@ -193,11 +263,32 @@ export default {
     auditMode: false,
     rules: {},
     violatingCells: [],
-    themeWords: [[], []],
+    themeWords: {
+      across: [],
+      down: []
+    },
     onLayer: 0,
     generating: false,
-    buildQueue: []
-    // worker: window.WEB_WORKER
+    buildQueue: [],
+    problemPatterns: [],
+    testResults: [
+      
+    ],
+    completeWords: [],
+    originalBoard: undefined,
+    usedWords: [],
+    decisionQueue: [],
+    triedWordOptions: {
+      across: {},
+      down: {}
+    },
+    currentFillOptions: [],
+    totalFillOptionAmount: 0,
+    loadingMessage: '',
+    logItems: [
+      
+    ],
+    iterations: 0
   }),
   computed: {
     percentBlack() {
@@ -206,6 +297,9 @@ export default {
     fullWordsFound() {
       return this.wordsNeeded.across.filter(wordObj => !wordObj.word.includes(`*`)).length ||
       this.wordsNeeded.down.filter(wordObj => !wordObj.word.includes(`*`)).length
+    },
+    selectedWord() {
+      return this.wordsNeeded[this.$store.state.editDirection].filter(wordSpaceObj => wordSpaceObj.number === this.selectedCell.number)[0];
     }
   },
   mounted() {
@@ -214,14 +308,15 @@ export default {
       this.$store.commit('setLoaded');     
     });
     this.createGrid(this.boardSize);
-    requestIdleCallback(() => {
+    requestAnimationFrame(async () => {
       this.addCellLabels();
       this.getWordsNeeded();      
-      setTimeout(() => {
-        this.getMLData().then(() => {
-          console.error('Home.vue getMLData finished')      
-        });      
-      }, 200);
+      // setTimeout(() => {
+        await this.getMLData();
+        console.error('Home.vue getMLData finished');
+        await this.generateNewBoard(); 
+        this.$store.commit('changeEditMode', 'puzzle')
+      // }, 200);
     });
     this.rules = this.$store.state.puzzleOptions.rules;
   },
@@ -232,7 +327,9 @@ export default {
     RulesModal,
     BrowseModal,
     SaveModal,
-    MicroBoard
+    ChoicesModal,
+    MicroBoard,
+    ActivityLog
   },
   methods: {
     // getContiguous(grid) {
@@ -449,6 +546,9 @@ export default {
       this.$store.commit('changeSavingType', 'word')
       this.showingModal = 'save';
     },
+    handleClickToViewChoices() {
+      this.showingModal = 'choices';
+    },
     handleClickToSaveClue(wordObj) {
       this.$store.commit('changeSelectedWord', wordObj)
       this.$store.commit('changeSavingType', 'clues')
@@ -636,12 +736,15 @@ export default {
       return cellString;
     },
     getWordsNeeded(cellGrid) {
+      // console.warn('called getWordsNeeded with', cellGrid)
       const grid = cellGrid ? cellGrid : this.cellGrid;
+      const doubleRootCells = [];
       const violations = [];
       const newWordsNeeded = {
         across: [],
         down: []
       };
+      let triedWordOptions = { across: [], down: [] };
       grid.forEach((row, r) => {
         // row.filter(cell => cell.number).forEach((cell, c) => {
         row.forEach((cell, c) => {
@@ -704,8 +807,13 @@ export default {
                 word: '*'.repeat(wordLengthToRight),
                 letterIndexes: acrossLetters,
                 clues: [],
-                selectedClue: 0
+                selectedClue: 0,
+                tried: [],
+                choices: [],
+                assigned: undefined,
+                direction: 'across'
               });
+              triedWordOptions.across[cell.number] = [];
             }
             if (wordLengthBelow) {
               newWordsNeeded.down.push({
@@ -713,19 +821,34 @@ export default {
                 word: '*'.repeat(wordLengthBelow),
                 letterIndexes: downLetters,
                 clues: [],
-                selectedClue: 0
+                selectedClue: 0,
+                tried: [],
+                choices: [],
+                assigned: undefined,
+                direction: 'down'
               });
+              triedWordOptions.down[cell.number] = [];
+            }
+            if (!doubleRootCells.includes(cell.number) && wordLengthToRight && wordLengthBelow) {
+              doubleRootCells.push(cell.index)
             }
           }
         });
       });
       if (!cellGrid) {
         this.wordsNeeded = newWordsNeeded;
+        this.doubleRootCells = doubleRootCells;
       }
+      // for (let direction in triedWordOptions) {
+      //   let directionList = triedWordOptions[direction];
+      //   directionList = directionList.filter(entry => entry);
+      // }
+      this.triedWordOptions = triedWordOptions;
       // console.log('newWordsNeeded', newWordsNeeded)
       return newWordsNeeded;
     },
     getViolatingCells(list, noDisplay, skipMax) {
+      let longestWord = [...list.across, ...list.down].sort((a, b) => b.word.length - a.word.length)[0];
       let st = window.performance.now();
       let violating = [];
       let allChecked = this.$store.state.puzzleOptions.rules.allChecked;
@@ -749,9 +872,6 @@ export default {
           tooShort = false;
         }
         if (tooShort || tooLong) {
-          if (tooLong) {
-            console.error(wordObj.number, 'DOWN IS TOO LONG!')
-          }
           wordObj.letterIndexes.forEach(index => {
             violating.push(index);
           })
@@ -765,7 +885,7 @@ export default {
       return violating;
     },
     changeLetter(e, index, newLetter) {
-      console.log('cocks', e, index, newLetter);
+      console.log('changeLetter args', e, index, newLetter);
       let allCells = this.cellGrid.flat();
       let targetCell = allCells[index];
       this.cellGrid[targetCell.row][targetCell.column].letter = newLetter;
@@ -791,48 +911,474 @@ export default {
       }
       this.getWordsNeeded();
     },
-    fillWithWord(word, number, direction) {
+    printWord(wordSpace, wordObj) {
+      console.log('calling printWord on ---->', wordSpace.number, wordObj.word)
       let cells = this.cellGrid.flat();
-      console.warn('gonna fill', number, direction, 'with', word);
-      let targetWord = this.wordsNeeded[direction].filter(wordObj => wordObj.number === number)[0];
+      let indexes = wordSpace.letterIndexes;
+      let newLetters = wordObj.word.split('');
+      indexes.forEach((index, i) => {
+        if (!cells[index].letter) {
+          cells[index].letter = newLetters[i];
+        }
+      });
+      wordSpace.word =  wordObj.word;
+      // this.usedWords.push(wordObj.word)
+      
+      // this.getWordsNeeded();
+    },
+    removeWord(wordSpace, wordObj) {
+      console.log('calling removeWord on ---->', wordSpace.number, wordObj.word)
+      let cells = this.cellGrid.flat();
+      let indexes = wordSpace.letterIndexes;
+      let newLetters = wordObj.word.split('');
+      indexes.forEach((index, i) => {
+        if (!cells[index].letter) {
+          cells[index].letter = newLetters[i];
+        }
+      });
+      wordSpace.word =  wordObj.word;
+      this.usedWords.push(wordObj.word)
+      
+      this.getWordsNeeded();
+    },
+    getWordSpace(number, direction) {
+      return this.wordsNeeded[direction].filter(wordObj => wordObj.number === number)[0];
+    },
+    fillWithWord(word, number, direction) {
+      // console.log('calling fillWithWord on ---->', word)
+      let cells = this.cellGrid.flat();
+      let targetWord = this.getWordSpace(number, direction)
       let indexes = targetWord.letterIndexes;
+      let newLetters = word.split('');
       if (word) {
         indexes.forEach((index, i) => { 
-          cells[index].letter = word.split('')[i]
+          cells[index].letter = newLetters[i]
         });
-        console.error('setting the word in wordsNeeded to', word)
-        targetWord.word = word;
+        // targetWord.word = word;
       } else {
-        this.violatingCells.push(...indexes);
-        this.highlightedWords.splice(this.highlightedWords.indexOf(targetWord), 1);
-        setTimeout(() => {          
-          this.highlightedWords.push(targetWord);
-        }, 500)
+        // this.violatingCells.push(...indexes);
+        // this.highlightedWords.splice(this.highlightedWords.indexOf(targetWord), 1);
+        // setTimeout(() => {          
+        //   this.highlightedWords.push(targetWord);
+        // }, 500)
+      }
+      // this.getWordsNeeded();
+    },
+    async findWord(direction, replace) {
+      const editDirection = direction || this.$store.state.editDirection;
+      const rootObj = this.getRootWords(this.selectedCell.index)[editDirection];
+      let pattern = '';
+      if (this.cellGrid.flat()[rootObj.letterIndexes[0]]) {
+        if (!replace) {
+          rootObj.letterIndexes.forEach(ind => {
+            pattern += this.cellGrid.flat()[ind].letter || '*';
+          });
+        } else {
+          pattern = '*'.repeat(rootObj.word.length)
+        }
+        let matchingWords = [];
+        const length = pattern.length;
+        let wordList = this.fullWordList[length];
+        if (!wordList) {
+          wordList = await this.getWordList(length);
+        } 
+        wordList = wordList.sort(() => Math.random() - 0.5);
+        for (let i = 0; i < wordList.length; i += 1) {
+          let word = wordList[i].word.toUpperCase();
+          let match = true;
+          pattern.split('').forEach((char, c) => {
+            if (char !== '*' && char.toUpperCase() !== word[c]) {
+              match = false;
+            }
+          });
+          if (match) {
+            matchingWords.push(wordList[i])
+          }
+        }
+        return matchingWords.length ? matchingWords : pattern;
+      } else {
+        console.error('letterIndex not in cells.flat', this.cellGrid.flat()[rootObj.letterIndexes[0]]);
+        // return 'BALLS';
+      }
+    },
+    async fillWithRandomWord() {
+      let choices = await this.getWordChoices();
+      console.log('choices', choices)
+      let randomWord = choices[0];
+      this.fillWithWord(randomWord.word, this.selectedCell.number, this.$store.state.editDirection);
+    },
+    async fillWithValidatedWord(e, rootCell, direction) {
+      const originalBoard = JSON.parse(JSON.stringify(this.cellGrid));
+      const startingCell = rootCell || this.selectedCell;
+      const editDirection = direction || this.$store.state.editDirection;
+      let randomWord;
+      let crossWordsOkay = true;
+      let findResult = await this.getWordChoices(e, startingCell, editDirection);
+      if (typeof findResult === 'object') {
+        // console.log('found', findResult.length, 'options for', startingCell.number, editDirection)       
+        this.totalFillOptionAmount = findResult.length; 
+        let triedArray = this.triedWordOptions[editDirection][startingCell.number];
+        findResult = findResult.filter(wordObj => !this.usedWords.includes(wordObj.word) && !triedArray.includes(wordObj.word));
+        // console.log('findResult length now', findResult.length) 
+        this.currentFillOptions = findResult;
+        if (findResult.length === 0) {
+
+          // console.error('NO CHOICES LEFT!', startingCell.number, editDirection);
+          crossWordsOkay = false;
+        } else {          
+          randomWord = findResult[0];
+          let oldBoard = JSON.parse(JSON.stringify(this.cellGrid));
+          this.fillWithWord(randomWord.word, startingCell.number, editDirection);
+          let oppositeDirection = editDirection === 'across' ? 'down' : 'across';
+          // this.decisionQueue.push(
+          //   {
+          //     board: oldBoard,
+          //     rootCell: startingCell,
+          //     direction: editDirection,
+          //     word: randomWord
+          //   }
+          // );
+          let changedNumbers = [];
+          let changedCells = this.getChangedCells(oldBoard);
+          changedCells.forEach(cell => {
+            let rootWords = this.getRootWords(cell.index);
+            if (!changedNumbers.includes(rootWords.across.number)) {
+              changedNumbers.push(rootWords.across.number);
+            }
+            if (!changedNumbers.includes(rootWords.down.number)) {
+              changedNumbers.push(rootWords.down.number);
+            }
+          });
+          crossWordsOkay = await this.validateWordSpaces(changedNumbers, oppositeDirection);
+        }
+      } else {
+        console.error('no options found for original word', startingCell.number, editDirection, findResult)
+        crossWordsOkay = false;
+        // return;
+      }
+      if (crossWordsOkay) {
+        // console.error(randomWord.word, 'WORD VALID!!')
+      } else {
+        // console.error('INVALID :(');        
+        this.cellGrid = originalBoard;
+        // this.getWordsNeeded;
+      }
+      return {
+        valid: crossWordsOkay,
+        triedWord: randomWord
+      }
+    },
+    async fill() {
+      this.problemPatterns = [];
+      this.logItems = [];
+      this.iterations = 0;
+      this.generating = true;
+      let filled = false;
+      let wordToRevise;
+      let direction;
+      while (!filled && this.generating) {
+        this.iterations += 1;
+        let fillResult = await this.fillAllWords(wordToRevise, direction);
+        filled = fillResult.success;
+        if (fillResult.wordToRevise) {
+          wordToRevise = fillResult.wordToRevise;
+          direction = fillResult.direction;
+        }
+        if (this.logItems.length > this.$store.state.editorOptions.logLength) {
+          this.logItems = this.logItems.reverse();
+          this.logItems.length = this.$store.state.editorOptions.logLength;
+          this.logItems = this.logItems.reverse();
+        }
+        // await this.wait(1);
+      }
+      this.generating = false;
+    },
+    getPartialWordWithLeastOptions(rootWordSpaceObj, direction) { 
+      let winner;
+      let winningDirection;
+      let sortedAcrossWords = this.wordsNeeded.across.filter(wordSpaceObj => wordSpaceObj.word.includes('*') && wordSpaceObj.choices.length).sort((a, b) => a.choices.length - b.choices.length);
+      let sortedDownWords = this.wordsNeeded.down.filter(wordSpaceObj => wordSpaceObj.word.includes('*') && wordSpaceObj.choices.length).sort((a, b) => a.choices.length - b.choices.length);
+      let rarestAcross = sortedAcrossWords[0];
+      let rarestDown = sortedDownWords[0];
+      if (!rarestAcross || !rarestDown || !rarestAcross.choices.length && !rarestDown.choices.length) {
+        let longestAcross = this.wordsNeeded.across.filter(wordSpaceObj => !this.usedWords.includes(wordSpaceObj.word)).sort((a, b) => b.word.length - a.word.length)[0];
+        let longestDown = this.wordsNeeded.down.filter(wordSpaceObj => !this.usedWords.includes(wordSpaceObj.word)).sort((a, b) => b.word.length - a.word.length)[0];
+        winner = longestAcross.word.length >= longestDown.word.length ? longestAcross : longestDown;
+        winningDirection = longestAcross.word.length >= longestDown.word.length ? 'across' : 'down';
+      } else {
+        if (rarestAcross.choices.length > rarestDown.choices.length) {
+          winner = rarestAcross;
+          winningDirection = 'across'
+        } else {
+          winner = rarestDown;
+          winningDirection = 'down'
+        }
+      }
+      console.warn('chose', winner.choices.length, winner.number, winningDirection)
+      return {
+        wordSpaceObj: winner
+      };
+    },
+    async fillAllWords(wordToRevise, direction) {
+      // this.generating = true;
+      let okSoFar = true;
+      const acrossBySize = this.wordsNeeded.across.sort((a, b) => b.word.length - a.word.length);
+      const downBySize = this.wordsNeeded.down.sort((a, b) => b.word.length - a.word.length);
+
+      let mainIndex = 0;
+      let altIndex = 0;
+      const allWordsBySize = [...acrossBySize, ...downBySize].sort((a, b) => b.word.length - a.word.length);
+      let longest;
+      let longestDirection;
+      if (acrossBySize[0].word.length > downBySize[0].word.length) {
+        longest = acrossBySize[0];
+        longestDirection = 'across';
+      } else if (downBySize[0].word.length > acrossBySize[0].word.length) {
+        longest = downBySize[0]
+        longestDirection = 'down';      
+      } else {
+        let acrossSum = acrossBySize[0].word.length + acrossBySize[1].word.length + acrossBySize[2].word.length;
+        let downSum = downBySize[0].word.length + downBySize[1].word.length + downBySize[2].word.length;
+        if (acrossSum >= downSum) {
+          longest = acrossBySize[0];
+          longestDirection = 'across';
+        } else {
+          longest = downBySize[0]
+          longestDirection = 'down';      
+        }
+      }
+      console.log('longest is', longest.number, 'at', longest.length)
+      console.log('longestDirection is', longestDirection)
+
+      let mainDirection;
+      let altDirection;
+      let mainList;
+      let altList;
+      if (acrossBySize[0].word.length > downBySize[0].word.length) {
+        mainDirection = 'across';
+        altDirection = 'down';
+        mainList = acrossBySize;
+        altList = downBySize;
+      } else {
+        mainDirection = 'down';
+        altDirection = 'across'
+        mainList = downBySize;
+        altList = acrossBySize;
       }
 
+      const totalBlankWords = allWordsBySize.length;
+      let i = 0;
+
+      // for (let i = 0; i < allWordsBySize.length; i += 1) {
+      let currentRootCell;
+      let wordSpaceObj;
+      let currentEditDirection;
+      while (this.generating && this.decisionQueue.length < totalBlankWords) {
+        let allCells = this.cellGrid.flat();                                                                        
+        if (!wordToRevise) {          
+          let leastOption = this.getPartialWordWithLeastOptions();
+          wordSpaceObj = leastOption.wordSpaceObj;
+          currentEditDirection = leastOption.wordSpaceObj.direction;
+        } else {
+          wordSpaceObj = wordToRevise;          
+          currentEditDirection = direction;
+        }
+        this.$store.commit('changeEditDirection', currentEditDirection);
+        if (!wordSpaceObj) {
+          console.error('bad direction of bad wordObj...', currentEditDirection);
+          this.generating = false;
+          await this.wait(1000);
+          return this.fill();
+          // currentDirection = currentEditDirection === 'across' ? 'down' : 'across';
+          // this.$store.commit('changeEditDirection', currentEditDirection);
+        }
+        this.highlightedWords[currentEditDirection] = [ wordSpaceObj ];      
+        this.highlightedWords[currentEditDirection === 'across' ? 'down' : 'across'] = [];
+        let currentNumber = wordSpaceObj.number;
+        currentRootCell = allCells[wordSpaceObj.letterIndexes[0]];        
+        this.selectedCell = currentRootCell;
+
+        this.logItems.push({
+          iterations: i,
+          message: `Finding word for ${currentRootCell.number} ${currentEditDirection.toUpperCase()} (choices: ${wordSpaceObj.choices.length})`,
+          type: 'normal'
+        });
+
+        wordToRevise = undefined;
+
+        let oldBoard = JSON.parse(JSON.stringify(this.cellGrid));
+        let oldWordsNeeded = JSON.parse(JSON.stringify(this.wordsNeeded));
+        // let oldTriedWordOptions = JSON.parse(JSON.stringify(this.triedWordOptions));
+        if (!wordSpaceObj.word.includes('*')) {
+          okSoFar = true;
+          console.warn('skipping', wordSpaceObj.word)
+        } else {          
+          okSoFar = await this.findViableWord();
+        }
+        if (!okSoFar) {
+          // console.error('------- STOPPED AUTO FILL. -------');          
+          break;
+        } else {
+          this.decisionQueue.push({
+            number: currentNumber,
+            direction: currentEditDirection,
+            word: okSoFar,
+            board: oldBoard,
+            wordsNeeded: oldWordsNeeded,
+            // triedWordOptions: oldTriedWordOptions
+          })
+        }
+        i += 1;
+      }
+      if (okSoFar) {
+        console.error('filled all of them :)')
+        return {success: true };
+      } else {
+        this.logItems.push({
+          iterations: '',
+          message: `No word found for ${currentRootCell.number} ${currentEditDirection.toUpperCase()}`,
+          type: 'error'
+        });
+        // wordToRevise = wordSpaceObj;
+        this.highlightedWords = { across: [], down: [] }
+        // this.triedWordOptions = this.decisionQueue[this.decisionQueue.length - 1].triedWordOptions;
+        const lastChoice = this.decisionQueue[this.decisionQueue.length - 1];
+        if (!lastChoice) {
+          console.error('decisionQueue is')
+          console.error(this.decisionQueue)
+          console.error('TRIED EVERY PERMUTATION OF', this.decisionQueue[0].number, this.decisionQueue[0].word.direction, '-', this.decisionQueue[0].word.word)
+          this.logItems.push({
+            iterations: '',
+            message: `Tried every permutation starting with ${this.decisionQueue[0].number} ${this.decisionQueue[0].word.direction}!`,
+            type: 'error'
+          });
+          return false;
+        }
+        this.cellGrid = lastChoice.board;
+        this.wordsNeeded = lastChoice.wordsNeeded;
+        currentEditDirection = lastChoice.direction;
+        this.$store.commit('changeEditDirection', currentEditDirection);
+        this.selectedCell = this.cellGrid.flat().filter(cell => cell.number === lastChoice.number)[0];
+        // let previousWord = lastChoice.word;
+        this.logItems.push({
+          iterations: '',
+          message: `reverting to ${lastChoice.number} ${currentEditDirection}!`,
+          type: 'error'
+        });
+        // this.usedWords = this.usedWords.splice(this.usedWords.indexOf(previousWord), 1);
+        this.decisionQueue.length = this.decisionQueue.length - 1;
+        // i -= 1;
+        
+        return { success: false, wordToRevise, direction: currentEditDirection };
+      }
+      // this.generating = false;
+      // this.$store.commit('changeEditDirection', 'down');
+      // for (let i = 0; i < downBySize.length; i += 1) {
+      //   let allCells = this.cellGrid.flat();
+      //   let wordSpaceObj = downBySize[i];        
+      //   let currentNumber = wordSpaceObj.number;
+      //   let currentRootCell = allCells[wordSpaceObj.letterIndexes[0]];
+      //   this.selectedCell = currentRootCell;
+
+      // }
+
     },
-    async findWord(e, direction, skipFill) {
+    async findViableWord(e) {
+      // this.getWordsNeeded();
+      if (e && e.target) {
+        // was a button click
+        this.generating = true;
+      }
+      let iterations = 0;
+      let limit = 10000;
+      let findResult;
+      let foundViableWord;
+      const originalBoard = JSON.parse(JSON.stringify(this.cellGrid));
+      let currentRootNumber = this.selectedCell.number;
+      const originalDirection = this.$store.state.editDirection;
+      while (!foundViableWord && this.generating && iterations < limit) {
+        findResult = await this.fillWithValidatedWord();                
+        foundViableWord = findResult.valid;
+        const currentEditDirection = this.$store.state.editDirection;
+        if (!foundViableWord) {
+          if (findResult.triedWord) {
+            // console.error(findResult.triedWord.word, '>>> was not viable!')
+            this.triedWordOptions[originalDirection][currentRootNumber].push(findResult.triedWord.word);
+            iterations += 1;
+            // this.iterations += 1;
+          } else {
+            // console.error('RAN OUT OF OPTIONS TO TRY!!');            
+            this.cellGrid = originalBoard;
+            break;
+          }
+        } else {
+          // console.error(findResult.triedWord.word, 'was viable!')
+          this.usedWords.push(findResult.triedWord.word);
+          let wordSpace = this.wordsNeeded[currentEditDirection].filter(wordSpaceObj => wordSpaceObj.number === currentRootNumber)[0];
+          let fullList = this.fullWordList[wordSpace.word.length];
+          let listObj = fullList[fullList.indexOf(findResult.triedWord)];
+          wordSpace.word = findResult.triedWord.word;
+          requestAnimationFrame(() => {
+            this.logItems.push({
+              iterations: '',
+              message: `${wordSpace.number} ${originalDirection.toUpperCase()} - printed ${findResult.triedWord.word.toUpperCase()} in ${iterations + 1} ${iterations ? 'tries' : 'try'}`,
+              type: 'success'
+            });
+          });
+        }
+        await this.wait(0);        
+      }
+      // let finalMessage = '';
+      if (foundViableWord) {
+        // finalMessage = `Found ${findResult.triedWord.word.toUpperCase()} in ${iterations + 1} tries`;
+        // console.error('FOUND', findResult.triedWord.word, 'in', iterations + 1, 'tries');
+      } else {
+        // finalMessage = `No word can fit in ${currentRootNumber} ${originalDirection}`;
+        let invalidWord = this.getRootWords(this.selectedCell.index)[originalDirection];
+        this.violatingCells = [...invalidWord.letterIndexes]
+      }
+      if (e && e.target) {
+        let finalMessage = foundViableWord ? 
+        `Found ${findResult.triedWord.word.toUpperCase()} in ${iterations + 1} tries` : 
+        `No word can fit in ${currentRootNumber} ${originalDirection}`;
+        this.loadingMessage = finalMessage;
+        await this.wait(800);
+        this.loadingMessage = '';
+        this.generating = false;
+        this.highlightedWords = { across: [], down: [] }
+      }
+      return foundViableWord ? findResult.triedWord : false;
+    },
+    async getWordChoices(e, rootCell, direction) {
+      const startingCell = rootCell || this.selectedCell;
       const editDirection = direction || this.$store.state.editDirection;
-      const rootObj = this.getRootWords(this.selectedCell.index)[this.$store.state.editDirection];
-      console.log('root is', rootObj)
+      const rootObj = this.getRootWords(startingCell.index)[editDirection];
       let pattern = '';
+      let completeWord;
       rootObj.letterIndexes.forEach(ind => {
-        pattern += this.cellGrid.flat()[ind].letter.toUpperCase() || '*';
-      })
-      const matchingWords = [];
-      console.log('got pattern', pattern)
+        pattern += this.cellGrid.flat()[ind].letter || '*';
+      });
+      // if (!pattern.includes('*')) {
+      //   console.error('GOING OVER COMPLETED WORD', pattern);
+      //   completeWord = true;
+      // }
+      let matchingWords = [];
       const length = pattern.length;
       let wordList = this.fullWordList[length];
       if (!wordList) {
-        console.error('no list yet! getting from db...')
         wordList = await this.getWordList(length);
-      } 
-      wordList = wordList.sort(() => Math.random() - 0.5);
+      }
+      // console.error('updating fill option total amoutn', length)
+      
+      // console.log('original choices number', wordList.length, '- pruning', this.usedWords.length, 'used words.')
+      wordList = wordList.filter(wordObj => wordObj.word === pattern || !this.usedWords.includes(wordObj.word)).sort(() => Math.random() - 0.5);
+      // console.log('choices after pruning:', wordList.length);
       for (let i = 0; i < wordList.length; i += 1) {
         let word = wordList[i].word.toUpperCase();
+        // console.log('comparing', word, 'to', pattern)
         let match = true;
         pattern.split('').forEach((char, c) => {
-          if (char !== '*' && char !== word[c]) {
+          if (char !== '*' && char.toUpperCase() !== word[c]) {
             match = false;
           }
         });
@@ -840,16 +1386,8 @@ export default {
           matchingWords.push(wordList[i])
         }
       }
-      console.log('found matching words', matchingWords.length);
-      // let winner;
-      // if (matchingWords.length) {
-      //   winner = matchingWords[randomInt(0, matchingWords.length - 1)];
-      //   console.log('winner', winner);
-      // }
-      // if (!skipFill && winner) {
-      //   this.fillWithWord(winner.word, this.selectedCell.number, editDirection);
-      // }
-      return matchingWords.length ? matchingWords : undefined;
+      // console.warn('getWordChoices for', startingCell.number, editDirection, matchingWords)
+      return matchingWords.length ? matchingWords : pattern;     
     },
 
     async getClues(word) {
@@ -860,42 +1398,41 @@ export default {
       }
       let matchingEntries = this.fullWordList[word.length].filter(listObj => word.toUpperCase() === listObj.word.toUpperCase());
       matchingEntries.forEach(entry => {
-        entry.clue = entry.clue[0].toUpperCase() + entry.clue.substr(1, entry.clue.length);
-        clueArray.push(entry.clue);
+        if (entry.clue[0]) {
+          entry.clue = entry.clue[0].toUpperCase() + entry.clue.substr(1, entry.clue.length);
+          clueArray.push(entry.clue);
+        }
       })
       console.log('clues for', word, ':', clueArray);
       
       return clueArray
     },
 
-    getWordList(length) {
-      console.error('CALLING DB FOR', length, '-LETTER WORDS');
-      return new Promise((resolve) => {
-        DB.getFullWordListOfLength(length).then((response) => {
-          if (response.data) {
-            const wordObjectList = response.data.split(' || ').filter(obj => obj).map(wordObj => wordObj = JSON.parse(wordObj));
-            console.warn('GOT LIST', wordObjectList);
-            wordObjectList.forEach(wordObj => {
-              if (wordObj.clues) {
-                wordObj.clues = JSON.parse(wordObj.clues);
-                wordObj.clues.forEach(clue => {
-                  clue = clue.replace(/`/g, "'");                
-                  clue = clue.replace(/|/g, "\"");                
-                });
-              }
-            })
-            this.fullWordList[length] = wordObjectList;
-            resolve(wordObjectList);
-          } else {
-            console.error('COULD NOT GET WORD LIST OF LENGTH', length);
+    async getWordList(length) {
+      console.warn('CALLING DB FOR', length + '-LETTER WORDS');
+      const response = await DB.getFullWordListOfLength(length);
+      if (response.data) {
+        const wordObjectList = response.data.split(' || ').filter(obj => obj).map(wordObj => wordObj = JSON.parse(wordObj));
+        wordObjectList.forEach(wordObj => {
+          if (wordObj.clues) {
+            wordObj.clues = JSON.parse(wordObj.clues);
+            wordObj.clues.forEach(clue => {
+              clue = clue.replace(/`/g, "'");                
+              // clue = clue.replace(/|/g, "\"");                
+            });
           }
-        });
-      });    
+        })
+        this.fullWordList[length] = wordObjectList;
+        console.warn('GOT', wordObjectList.length, length + '-letter words');
+        return wordObjectList;
+      } else {
+        return ('COULD NOT GET WORD LIST OF LENGTH', length);
+      }
     },
     async changeEditMode(e) {
       const newMode = e.target.id.split('-')[0];
       this.selectedCell = undefined;
-      this.highlightedWords = [];
+      this.highlightedWords = { across: [], down: [] };
       if (newMode === 'clues') {
         let fullAcrossWords = this.wordsNeeded.across.filter(wordObj => !wordObj.word.includes('*'));
         let fullDownWords = this.wordsNeeded.down.filter(wordObj => !wordObj.word.includes('*'));
@@ -994,6 +1531,9 @@ export default {
       return coordArray;
     },
     handleCellFlip(e) {
+      if (this.$store.state.logOpen) {
+        this.$store.commit('toggleLog');
+      }
       let startTime = window.performance.now();
       const clickedIndex = e.target.id.split('-')[1];
       const cellCoords = { row: this.cellGrid.flat()[clickedIndex].row, column: this.cellGrid.flat()[clickedIndex].column };
@@ -1019,6 +1559,9 @@ export default {
       });
     },
     handleCellSelect(e) {
+      if (this.$store.state.logOpen) {
+        this.$store.commit('toggleLog');
+      }
       console.log('currently selected is', this.selectedCell)
       const allCells = this.cellGrid.flat();
       const clickedIndex = parseInt(e.target.id.split('-')[1]);
@@ -1027,39 +1570,60 @@ export default {
       console.warn('GOT ROOTS', rootWords);
       if (!allCells[clickedIndex].shaded) {
         if (!this.selectedCell || clickedIndex !== this.selectedCell.index) {
-          this.highlightedWords = [];
+          this.highlightedWords = { across: [], down: [] };
           // this.selectedCell.index = clickedIndex;
           let newSelected = allCells[clickedIndex]
           console.warn('chaning to index', clickedIndex, newSelected);
           this.selectedCell = newSelected;
           if (numbered) {
-            if (rootWords.down) {   
-              if (rootWords.down.letterIndexes[0] === clickedIndex) {           
-                this.$store.commit(`changeEditDirection`, `down`);
+            if (rootWords.across && rootWords.down) {
+              let currentEditDirection = this.$store.state.editDirection || 'across';
+              this.$store.commit(`changeEditDirection`, currentEditDirection);
+              this.highlightedWords = { across: [], down: [] };
+              this.highlightedWords[currentEditDirection].push(rootWords[currentEditDirection]);
+            } else {
+              if (rootWords.down) {   
+                if (rootWords.down.letterIndexes[0] === clickedIndex) {           
+                  this.$store.commit(`changeEditDirection`, `down`);
+
+                  this.highlightedWords.across = [];
+                  this.highlightedWords.down.push(rootWords.down)
+                }
               }
-              this.highlightedWords.push(rootWords.down)
+              if (rootWords.across) {
+                if (rootWords.across.letterIndexes[0] === clickedIndex) {
+                  this.$store.commit(`changeEditDirection`, `across`);
+                  this.highlightedWords.down = [];
+                  this.highlightedWords.across.push(rootWords.across)
+                }              
+              }
             }
-            if (rootWords.across) {
-              if (rootWords.across.letterIndexes[0] === clickedIndex) {
-                this.$store.commit(`changeEditDirection`, `across`);
-              }
-              this.highlightedWords.push(rootWords.across)
-            }            
           } else {
             for (let direction in rootWords) {
-              this.highlightedWords.push(rootWords[direction]);
+              this.highlightedWords[direction].push(rootWords[direction]);
             }
           }
           console.warn('SELECTED cell', this.selectedCell)
         } else {
-          console.error('clicked when already selected');
-          if (numbered) {
+          console.error('clicked when already selected. numbered', numbered, 'this.$store.state.enteringLetters', this.$store.state.enteringLetters);
+          if (numbered || this.$store.state.enteringLetters) {
             const currentEditDirection = this.$store.state.editDirection;
-            if (currentEditDirection === 'across' && rootWords.down && rootWords.down.letterIndexes[0] === clickedIndex) {
+            if (
+              (currentEditDirection === 'across' && this.$store.state.enteringLetters) || 
+              (currentEditDirection === 'across' && rootWords.down && rootWords.down.letterIndexes[0] === clickedIndex)
+            ) {
+              console.log('flipping dir')
               this.$store.commit(`changeEditDirection`, `down`);
-            }
-            if (currentEditDirection === 'down' && rootWords.across && rootWords.across.letterIndexes[0] === clickedIndex) {
+              this.highlightedWords.across = [];
+              this.highlightedWords.down.push(rootWords.down)
+            } else if (
+              (currentEditDirection === 'down' && this.$store.state.enteringLetters) || 
+              (currentEditDirection === 'down' && rootWords.across && rootWords.across.letterIndexes[0] === clickedIndex)
+            ) {
+              console.log('flipping dir')
               this.$store.commit(`changeEditDirection`, `across`);
+              this.highlightedWords.down = [];
+              this.highlightedWords.across.push(rootWords.across)
             }
           }
           // this.$store.commit(`changeEditDirection`, this.$store.state.editDirection === `across` ? `down` : `across`)
@@ -1218,7 +1782,6 @@ export default {
     getRootWords(cellIndex, needed) {
       const wordsNeeded = needed || this.wordsNeeded;
       let roots = {};
-      console.warn('this.wordsNeed is', wordsNeeded)
       for (let wordDirection in wordsNeeded) {
         let wordList = wordsNeeded[wordDirection];
         wordList.forEach(wordObj => {
@@ -1230,37 +1793,68 @@ export default {
       return roots;
     },
     getThemeWords(wordsNeeded) {
-      let themeWords = [
-        [],
-        []
-      ];
+      let themeWords = {
+        across: [],
+        down: []
+      };
       let wordArray = Object.values(wordsNeeded).flat().sort((a, b) => b.word.length - a.word.length);
       let longest = wordArray[0].word.length;
       let longestQuantity = wordArray.filter(wordObject => wordObject.word.length === longest).length
-      let shortest = wordArray[wordArray.length - 1].word.length;
-      let secondLongest = wordArray.filter(wordObject => wordObject.word.length !== longest)[0].word.length;
-      let longestMargin = longest - secondLongest;
-      let secondLongestMargin = secondLongest - shortest;
-      let secondLongestQuantity = wordArray.filter(wordObject => wordObject.word.length === secondLongest).length
-      if (this.boardSize.width / longest > 1.75) {
-        longestMargin = undefined;
-        console.error('longest too short to be a theme word', longest)
+      
+      let acrossWordArray = wordsNeeded.across.sort((a, b) => b.word.length - a.word.length);
+      let downWordArray = wordsNeeded.down.sort((a, b) => b.word.length - a.word.length);
+      let longestAcross = acrossWordArray[0];
+      let longestDown = downWordArray[0];
+      let acrossQuantity = acrossWordArray.filter(wordObject => wordObject.word.length === longestAcross.word.length)
+      let downQuantity = downWordArray.filter(wordObject => wordObject.word.length === longestDown.word.length)
+
+      // console.warn('acrossWordArray', acrossWordArray)
+      // console.warn('longestAcross', longestAcross.word.length)
+      // console.warn('acrossQuantity', acrossQuantity)
+
+      let longerDirection;
+
+      if (longestAcross.word.length > longestDown.word.length) {
+        longerDirection = 'across';
+        wordArray = acrossQuantity;
+      } else {
+        longerDirection = 'down';
+        wordArray = downQuantity;
       }
-      if (!longestMargin || this.boardSize.width / secondLongest > 2) {
-        console.error('secondLongest too short to be a theme word', secondLongest)
-        secondLongestMargin = undefined;
+
+      console.log('longerdirectons is', longerDirection)
+
+      // let shortest = wordArray[wordArray.length - 1].word.length;
+      // let secondLongest = wordArray.filter(wordObject => wordObject.word.length !== longest)[0].word.length;
+      // let longestMargin = longest - secondLongest;
+      // let secondLongestMargin = secondLongest - shortest;
+      // let secondLongestQuantity = wordArray.filter(wordObject => wordObject.word.length === secondLongest).length
+      // if (this.boardSize.width / longest > 1.75) {
+      //   longestMargin = undefined;
+      //   console.error('longest too short to be a theme word', longest)
+      // }
+      // if (!longestMargin || this.boardSize.width / secondLongest > 2) {
+      //   console.error('secondLongest too short to be a theme word', secondLongest)
+      //   secondLongestMargin = undefined;
+      // }
+
+      // wordArray.forEach(wordObject => {
+      //   let wordLength = wordObject.word.length;
+      //   if (!themeWords[longerDirection].includes(wordObject)) {
+      //     if (wordLength > 8) {
+      //       themeWords[longerDirection].push(wordObject);
+      //     }
+      //     // if (longestQuantity <= 4 && secondLongestQuantity <= 4 && longestQuantity <= 2 && secondLongestQuantity <= 4 && secondLongestMargin && wordLength === secondLongest) {
+      //     //   themeWords[1].push(wordObject);
+      //     // }
+      //   }
+      // });
+      let themeMinimum = 10;
+      console.warn('theme min', themeMinimum)
+      if (wordArray[0].word.length >= themeMinimum && wordArray.length <= this.$store.state.puzzleOptions.rules.themeWords) {
+        themeWords[longerDirection] = wordArray;
       }
-      wordArray.forEach(wordObject => {
-        let wordLength = wordObject.word.length;
-        if (!themeWords.flat().includes(wordObject)) {
-          if (longestQuantity <= 4 && longestMargin && wordLength === longest) {
-            themeWords[0].push(wordObject);
-          }
-          // if (longestQuantity <= 4 && secondLongestQuantity <= 4 && longestQuantity <= 2 && secondLongestQuantity <= 4 && secondLongestMargin && wordLength === secondLongest) {
-          //   themeWords[1].push(wordObject);
-          // }
-        }
-      });
+      console.warn('got theme words', themeWords)
       return themeWords;
     },
     getWordsForCell(cellIndex, wordsNeeded) {
@@ -1269,115 +1863,121 @@ export default {
         down: wordsNeeded.down.filter(wordObj => wordObj.letterIndexes.includes(cellIndex))[0],
       }
     },
-    generateNewBoard(instant) {
-      let genStart = window.performance.now();
-      let canceled = false;
-      let viableCells = this.cellGrid.flat().filter(cell => !cell.shaded && !cell.letter);
-      // this.clearBoard();
-      this.generating = true;
-      this.buildQueue.length = 0;
-      let blackness = 0;
-      let previousBlackness;
-      let newGrid;
-      // let timeout = this.rules.blackRate * 3 * (3 - this.symmetry)
-      let timeout = 3000;
-      this.count = 0;
-      this.redundant = 0;
-      this.growBoard = (baseGrid, skipRender) => {
-        this.count++;
-        let generated = this.generateLayer(baseGrid, viableCells);
-        const grid = generated.grid;
-        const changed = viableCells.length !== generated.viableCells.length;
-        viableCells = generated.viableCells.filter(cell => !cell.shaded); 
-        // this.previousBlackness = this.blackness;
-        blackness = this.getPercentBlack(grid);  
-        if (skipRender) {
-          this.cellGrid = grid;
-        }
-        let tooRedundant = this.redundant >= timeout;
-        let timedOut = this.count >= timeout;
-        let enoughBlack = blackness >= this.rules.blackRate;
-        let failed = viableCells.length === 0;
-        if (this.generating && !tooRedundant && !timedOut && !enoughBlack) {   
-          if (true) {            
-            requestAnimationFrame(() => {              
-              this.growBoard(grid, changed);             
-            });
-            // setTimeout(() => {              
-            //   this.growBoard(grid);             
-            // }, 650);
+    async generateNewBoard(instant) {
+      return new Promise(resolve => {
+
+        let genStart = window.performance.now();
+        let canceled = false;
+        let viableCells = this.cellGrid.flat().filter(cell => !cell.shaded && !cell.letter);
+        // this.clearBoard();
+        this.generating = true;
+        this.buildQueue.length = 0;
+        let blackness = 0;
+        let previousBlackness;
+        let newGrid;
+        // let timeout = this.rules.blackRate * 3 * (3 - this.symmetry)
+        let timeout = 3000;
+        this.count = 0;
+        this.redundant = 0;
+        this.growBoard = (baseGrid, skipRender) => {
+          this.count++;
+          let generated = this.generateLayer(baseGrid, viableCells);
+          const grid = generated.grid;
+          const changed = viableCells.length !== generated.viableCells.length;
+          viableCells = generated.viableCells.filter(cell => !cell.shaded); 
+          // this.previousBlackness = this.blackness;
+          blackness = this.getPercentBlack(grid);  
+          if (skipRender) {
+            this.cellGrid = grid;
+          }
+          let tooRedundant = this.redundant >= timeout;
+          let timedOut = this.count >= timeout;
+          let enoughBlack = blackness >= this.rules.blackRate;
+          let failed = viableCells.length === 0;
+          this.viableCellAmount = viableCells.length;
+          if (this.generating && !tooRedundant && !timedOut && !enoughBlack) {   
+            if (true) {            
+              requestAnimationFrame(() => {              
+                this.growBoard(grid, changed);             
+              });
+              // setTimeout(() => {              
+              //   this.growBoard(grid);             
+              // }, 650);
+            } else {
+              this.redundant++
+              console.error(this.count, 'redundant!')
+              // requestIdleCallback(() => {
+                this.growBoard(this.cellGrid, true);             
+              // });
+            }
           } else {
-            this.redundant++
-            console.error(this.count, 'redundant!')
-            requestIdleCallback(() => {
-              this.growBoard(this.cellGrid, true);             
-            });
+            if (!this.generating) {
+              canceled = true;
+              console.error('CANCELED ----------------')
+            }
+            console.warn('board generated in', (window.performance.now() - genStart).toFixed(2));
+            console.warn('count was', this.count);
+            console.warn('redundant was', this.redundant);
+            // requestAnimationFrame(() => {            
+              newGrid = this.addCellLabels(grid);
+              let needed = this.getWordsNeeded(newGrid);
+              this.wordsNeeded = needed;
+              this.violatingCells = this.getViolatingCells(needed);
+              let themeWords = this.getThemeWords(needed);
+              this.themeWords = themeWords;
+              let contiguous = boardValidator.checkIfContiguous(newGrid, newGrid.flat());
+              this.contiguous = contiguous;
+              this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');            
+              this.generating = false;              
+              this.cellGrid = newGrid;
+              this.onLayer = 0;            
+              // console.error('stopped at timedOut', timedOut);
+              // console.error('stopped at tooRedundant', tooRedundant);
+              // console.error('stopped at enoughBlack', enoughBlack);
+              // console.error('stopped at canceled', canceled);
+              // console.error('stopped at failed', failed);
+              resolve();
+              // setTimeout(() =>{
+              //   requestAnimationFrame(() => {
+              //     this.cellGrid.forEach(row => row.map(cell => cell.letter = ''))
+              //     viableCells.forEach(cell => this.cellGrid[cell.row][cell.column].letter = 'V') 
+              //   })
+              // }, 500)
+            // });
           }
-        } else {
-          if (!this.generating) {
-            canceled = true;
-            console.error('CANCELED ----------------')
-          }
-          console.warn('board generated in', (window.performance.now() - genStart).toFixed(2));
-          console.warn('count was', this.count);
-          console.warn('redundant was', this.redundant);
-          requestAnimationFrame(() => {            
-            newGrid = this.addCellLabels(grid);
-            let needed = this.getWordsNeeded(newGrid);
-            this.wordsNeeded = needed;
-            this.violatingCells = this.getViolatingCells(needed);
-            let themeWords = this.getThemeWords(needed);
-            this.themeWords = themeWords;
-            let contiguous = boardValidator.checkIfContiguous(newGrid, newGrid.flat());
-            this.contiguous = contiguous;
-            this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');            
-            this.generating = false;              
-            this.cellGrid = newGrid;
-            this.onLayer = 0;            
-            console.error('stopped at timedOut', timedOut);
-            console.error('stopped at tooRedundant', tooRedundant);
-            console.error('stopped at enoughBlack', enoughBlack);
-            console.error('stopped at canceled', canceled);
-            console.error('stopped at failed', failed);
-            // setTimeout(() =>{
-            //   requestAnimationFrame(() => {
-            //     this.cellGrid.forEach(row => row.map(cell => cell.letter = ''))
-            //     viableCells.forEach(cell => this.cellGrid[cell.row][cell.column].letter = 'V') 
-            //   })
-            // }, 500)
-          });
+          // return grid;
         }
-        // return grid;
-      }
-      if (instant === true) {
-        // while (count < timeout && blackness < this.rules.blackRate) {
-        //   requestIdleCallback(() => {
-        //     newGrid = this.generateLayer();       
-        //     this.cellGrid = newGrid;
-        //     count++
-        //     blackness = this.getPercentBlack(newGrid);            
-        //   })
-        // }
-        // newGrid = this.addCellLabels(newGrid);
-        // this.cellGrid = newGrid;
-        // requestAnimationFrame(() => {
-        //   let needed = this.getWordsNeeded(newGrid);
-        //   this.wordsNeeded = needed;
-        //   this.violatingCells = this.getViolatingCells(needed);
-        //   this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
-        //   // this.contiguous = boardValidator.checkIfContiguous(newGrid)
-        //   this.getContiguous(newGrid).then((contiguous) => {
-        //     this.contiguous = contiguous;
-        //     this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
-        //   });
-        //   this.onLayer = 0;
-        //   console.error('stopped at blackness, count', blackness, count);
-        //   this.generating = false;
-        // });
-      } else {          
-        this.growBoard(this.cellGrid);
-        // let newGrid = this.cellGrid;
-      }
+        if (instant === true) {
+          // while (count < timeout && blackness < this.rules.blackRate) {
+          //   requestIdleCallback(() => {
+          //     newGrid = this.generateLayer();       
+          //     this.cellGrid = newGrid;
+          //     count++
+          //     blackness = this.getPercentBlack(newGrid);            
+          //   })
+          // }
+          // newGrid = this.addCellLabels(newGrid);
+          // this.cellGrid = newGrid;
+          // requestAnimationFrame(() => {
+          //   let needed = this.getWordsNeeded(newGrid);
+          //   this.wordsNeeded = needed;
+          //   this.violatingCells = this.getViolatingCells(needed);
+          //   this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
+          //   // this.contiguous = boardValidator.checkIfContiguous(newGrid)
+          //   this.getContiguous(newGrid).then((contiguous) => {
+          //     this.contiguous = contiguous;
+          //     this.offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
+          //   });
+          //   this.onLayer = 0;
+          //   console.error('stopped at blackness, count', blackness, count);
+          //   this.generating = false;
+          // });
+        } else {          
+          this.growBoard(this.cellGrid);
+          // let newGrid = this.cellGrid;
+        }
+      })
+      
     },
     generateLayer(baseLayer, viableCells) {
       let foundGoodCell = false;
@@ -1411,7 +2011,7 @@ export default {
 
           newGrid = this.addCellLabels(newGrid);
           let needed = this.getWordsNeeded(newGrid);
-          let enforceMax = false;
+          let enforceMax = true;
           violating = this.getViolatingCells(needed, true, enforceMax);
           newGrid.forEach(row => row.map(cell => cell.number = ''))
      
@@ -1578,13 +2178,27 @@ export default {
       });
     },
 
+    async analyzeWordOptions(startingCell, direction) {
+
+    },
+
     async clearLetters(e, shade) {
+      if (this.$store.state.logOpen) {
+        this.$store.commit('toggleLog');
+      }
       this.cellGrid.forEach((row, r) => {
         row.map((cell, c) => {
           return cell.letter = '';
         });
       });
+      this.viableWords.length = 0;
       this.violatingCells.length = 0;
+      this.selectedCell = undefined;
+      this.usedWords = [];
+      this.decisionQueue = [];
+      this.logItems = [];
+      this.iterations = 0;
+      this.triedWordOptions = { across: [], down: [] };
       this.getWordsNeeded();
     },
     async discoverNewWords() {
@@ -1646,6 +2260,9 @@ export default {
       this.showingModal = undefined;
     },
     clearBoard(e, shade) {
+      if (this.$store.state.logOpen) {
+        this.$store.commit('toggleLog');
+      }
       if (e && this.generating) {
         this.cancelGeneration();
         setTimeout(() => {
@@ -1670,8 +2287,8 @@ export default {
         this.cellGrid = updatedCells;
         this.addCellLabels();
         this.getWordsNeeded();
-        this.themeWords = [[], []];
-        this.highlightedWords = [];
+        this.themeWords = { across: [], down: [] };
+        this.highlightedWords = { across: [], down: [] };
         this.violatingCells = [];
         this.contiguous = true;
         this.offensiveQuotient = 0;
@@ -1750,42 +2367,729 @@ export default {
       });
     },
     getChangedCells(oldBoard) {
+      const oldCells = oldBoard.flat();
       const changedCells = this.cellGrid.flat().filter((cell, i) => {
-        return cell.letter !== oldBoard.flat()[i].letter
+        return cell.letter !== oldCells[i].letter
       });
-      return changedCells
+      return changedCells;
+    },
+    eraseWord(rootCell, direction, cells) {
+      let cell = rootCell || this.selectedCell;
+      let wordDirection = direction || this.$store.state.editDirection;
+      console.warn('wordsneeded', this.wordsNeeded[wordDirection])
+      console.warn('wordDirection', wordDirection)
+      // let word = this.wordsNeeded[wordDirection].filter(wordObj => wordObj.letterIndexes[0] === cell.index)[0].word;
+      let word = this.getRootWords(rootCell.index)[wordDirection];
+      word.letterIndexes.forEach(ind => {
+        let cellObj = this.cellGrid.flat()[ind];
+        if (cells.includes(cellObj)) {
+          this.cellGrid[cellObj.row][cellObj.column].letter = '';
+        }
+      });
+      // this.fillWithWord(' '.repeat(word.length), rootCell.number, wordDirection);
+    },
+    async getProblemPatterns() {
+      let problemPatterns = [];
+      while (problemPatterns.length < 1) {
+        let pat = await this.fillBoard();
+        if (!problemPatterns.includes(pat.problemPattern)) {
+          problemPatterns.push(pat.problemPattern && pat.problemPattern.toUpperCase());
+        }
+        this.clearLetters();
+        this.testResults.push();
+      }
+      this.problemPatterns = problemPatterns;
+      this.$store.commit('changeSavingType', 'word')
+      this.showingModal = 'save';
+    },
+    getWordCluster(startingCell) {
+      let rootCells = [];
+      let rootWords = this.getRootWords(startingCell.index)
+      console.log('rootWords', rootWords)
+      for (let direction in rootWords) {        
+        rootWords[direction].letterIndexes.forEach(ind => {
+          if (!rootCells.includes(ind)) {
+            rootCells.push(ind);
+          }
+        })
+      }
+      console.warn('rootCells are', rootCells)
+      return rootCells;
+    },
+    async fillWordCluster(e, startingWordSpace) {
+      this.decisionQueue = [];
+      this.generating = true;
+      let allCells = this.cellGrid.flat();
+      let currentEditDirection = this.$store.state.editDirection || 'across';
+      let startingWord = startingWordSpace || 
+        this.getRootWords(this.selectedCell ? this.selectedCell.index : this.doubleRootCells[0])[currentEditDirection];
+      let initialWordChoice;
+      // console.log('startingWord', startingWord, currentEditDirection)
+      const initialResult = await this.getWordChoices(null, allCells[startingWord.letterIndexes[0]], currentEditDirection);
+      const originalBoard = JSON.parse(JSON.stringify(this.cellGrid));
+      // this.selectedCell = undefined;
+      let previousBoard;
+      if (initialResult) {
+        let oppositeEditDirection = currentEditDirection === 'across' ? 'down' : 'across';
+        // console.error('GOT INITIAL CHOICES!', initialResult);
+        initialWordChoice = initialResult[0];
+        // console.warn('chose initial word', initialWordChoice.word, initialWordChoice.id);
+        
+        this.printWord(startingWord, initialWordChoice);
+        // this.usedWords.push(startingWord.word)
+
+        startingWord.assigned = startingWord;
+        
+        for (let i = 0; i < startingWord.letterIndexes.length; i += 1) {
+          let triedWords = [];
+          let foundValidWord = false;
+          // console.warn('>>>>>>>>>>>>>>>')
+          // console.warn('doing letter', i, 'of startingWord', initialWordChoice.word);
+          // console.warn('>>>>>>>>>>>>>>>')
+          previousBoard = JSON.parse(JSON.stringify(this.cellGrid));
+          while (!foundValidWord && this.generating) {
+            allCells = this.cellGrid.flat();
+            startingWord = this.getRootWords(this.selectedCell.index)[currentEditDirection];
+            console.log('startingWord', startingWord)
+            console.log('on i', i)
+            const crossWord = this.getRootWords(startingWord.letterIndexes[i])[oppositeEditDirection];
+            console.warn('on CROSS WORD', crossWord.number, oppositeEditDirection)
+            requestAnimationFrame(() => {
+              this.highlightedWords[oppositeEditDirection] = [
+                crossWord
+              ]
+            })
+            await this.wait(5);
+            this.violatingCells = [];
+            const crossRootIndex = crossWord.letterIndexes[0];
+            let crossResult = await this.getWordChoices(null, allCells[crossRootIndex], oppositeEditDirection);
+            let crossWordChoice;
+            if (crossResult && typeof crossResult !== 'string') {
+              // console.log('crossResult', crossResult)
+              if (typeof crossResult[0] === 'string') {
+                foundValidWord = false;
+                crossWordChoice = crossResult[0];
+              } else {
+                // console.log(crossResult.length, 'total choices for cross word', crossWord.number, oppositeEditDirection)
+                crossResult = crossResult.filter(wordObj => !triedWords.includes(wordObj));
+                console.log(crossResult.length, 'untried choices for cross word', crossWord.number, oppositeEditDirection)
+                if (crossResult.length === 0) {
+                  // console.error('OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
+                  console.error('OUT OF CHOICES')
+                  // console.error('OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
+                  foundValidWord = false;
+                } else {
+                  crossWordChoice = crossResult[0];
+                  this.decisionQueue.push({
+                    rootCellIndex: crossRootIndex,
+                    number: crossWord.number,
+                    direction: oppositeEditDirection,
+                    previousBoard: JSON.parse(JSON.stringify(this.cellGrid))
+                  })
+                  await this.wait(10);
+                  this.printWord(crossWord, crossWordChoice);
+                  foundValidWord = await this.validateWordSpaces();
+                  // if (foundValidWord) { this.usedWords.push(crossWordChoice.word) }
+                }
+              }
+              if (foundValidWord) {
+                
+                console.error(initialWordChoice.word.toUpperCase(), startingWord.number, currentEditDirection, '--- BOARD VALID!');
+                crossWord.assigned = crossWordChoice;
+              } else {
+                if (!crossWordChoice) {
+                  // console.error('crosswordChoice !== anything')
+                  crossWordChoice = ''
+                }
+                console.error('BOARD INVALID WITH CROSSWORD', crossWordChoice)
+                // console.error('BOARD INVALID WITH CROSSWORD', crossWordChoice.word, 'AT', crossWord.number, oppositeEditDirection);
+                triedWords.push(crossWordChoice);
+                let queuePoint;
+                if (this.decisionQueue.length > 1) {
+                  // this.decisionQueue.length = this.decisionQueue.length - 1;         
+                  queuePoint = this.decisionQueue[this.decisionQueue.length - 1];
+                  // console.warn('REVERTING TO', queuePoint.number, queuePoint.direction);
+                  this.cellGrid = queuePoint.previousBoard;
+                  this.selectedCell = allCells[queuePoint.rootCellIndex];
+                  currentEditDirection = queuePoint.direction;
+                  // triedWords = [];
+                  this.usedWords = [];
+                  if (i > 0) {
+                    i -= 1;
+                  }
+                } else {
+                  console.error('AT ZERO!')
+                  break;
+                  this.decisionQueue.length = 0;
+                  this.cellGrid = originalBoard;
+                  this.selectedCell = allCells[startingWord.letterIndexes[0]];
+                  currentEditDirection = 'across';
+                  this.usedWords = [];
+                  triedWords = [];
+                }
+                // if (i > 0) {
+                //   i -= 1;
+                // } else {
+                //   console.log('couldn\'t lower i no more');
+                //   this.generating = false;
+                //   break;
+                // }
+                // // if (this.decisionQueue.length > 1) {
+                //   //   this.cellGrid = this.decisionQueue[this.decisionQueue.length - 2].previousBoard;
+                // // } else {
+                //   //   this.cellGrid = originalBoard;
+                // // }
+               
+                // triedWords = [];
+                // i -= 1;
+                // if (i < 0) {
+                //   this.cellGrid = originalBoard;
+                //   this.selectedCell = allCells[this.decisionQueue[0].rootCellIndex];
+                //   currentEditDirection = this.decisionQueue[0].direction;
+                //   console.error('i was less than zero!!!');
+                //   i = 0;
+                //   this.generating = false;
+                //   break;
+                // }
+                // this.getWordsNeeded();
+              }
+            } else {    
+              console.error('>> NO CROSS CHOICES FOR i', i, initialWordChoice.word[i], 'in', initialWordChoice.word, crossResult);              
+              this.cellGrid = this.decisionQueue[0].previousBoard;
+              // previousBoard = JSON.parse(JSON.stringify(this.cellGrid));
+              // this.getWordsNeeded();
+              // console.error('reached original word?');
+              console.error(initialWordChoice.word, '---- cannot exist here. >>>>>>>>>>>>>>>>>>')
+              this.generating = false;
+              break;
+              
+            }       
+            // await this.wait(1);
+          }
+        }
+        this.generating = false;
+        this.highlightedWords = { across: [], down: [] };
+        this.usedWords = [];
+
+      } else {
+        console.error('>> NO RESULT!')
+      }
+    },
+    async fillSingleRoots() {
+      let allCells = this.cellGrid.flat();
+      this.getWordsNeeded();
+      this.violatingCells = [];
+      let filled = false;
+      let repetitions = 0;
+      let limit = 200;
+      let rootIndex = 0;
+      let rootCellLists = {
+        across: this.wordsNeeded.across.filter(wordObj => wordObj.word && !this.doubleRootCells.includes(wordObj.letterIndexes[0])),
+        down: this.wordsNeeded.down.filter(wordObj => wordObj.word && !this.doubleRootCells.includes(wordObj.letterIndexes[0]))
+      };
+      // for (let i = 0; i < Object.values(rootCellLists).length; i += 1) {
+      //   let wordList = Object.values(rootCellLists)[i];
+      //   let direction = Object.keys(rootCellLists)[i];
+      //   wordList.forEach((wordObj, w) => {
+      //     rootCellLists[direction][w] = allCells[wordList[i].letterIndexes[0]];
+      //   })
+      // }
+      console.log('got root lists', rootCellLists)
+
+      // let startingCell = rootList[rootIndex];
+
+      let currentEditDirection = this.$store.state.editDirection;
+      // this.selectedCell = startingCell;      
+      this.generating = true;
+
+      // this.decisionQueue = [];
+
+      while (this.generating && !filled && repetitions < limit) {
+        await this.wait(5);
+        for (let i = 0; i < Object.values(rootCellLists).flat().length; i += 1) {
+          let wordList = Object.values(rootCellLists)[i];
+          let direction = Object.keys(rootCellLists)[i];
+          for (let w = 0; w < wordList.length; w += 1) {     
+
+            let currentCell = allCells[wordList[w].letterIndexes[0]];
+            console.log('doing cell', currentCell, direction)
+            this.selectedCell = currentCell;
+            let validateResult = await this.fillWithValidatedWord(null, currentCell, direction);
+            if (validateResult) {
+  
+            } else {
+              break;
+            }
+          }
+        }
+        this.generating = false;
+        return;
+      }
+      //   let checkDirection;
+      //   if (repetitions % 2  === 0) {
+      //     checkDirection = 'across';
+      //   } else {
+      //     checkDirection = 'down';
+      //   }
+      //   if (!validateResult) {
+      //     requestAnimationFrame(() => {
+      //       let newQueueIndex;
+      //       if (this.decisionQueue.length > 1) {
+      //         this.decisionQueue.length = this.decisionQueue.length - 1;
+      //         newQueueIndex = this.decisionQueue.length - 1;
+      //       } else if (this.decisionQueue.length === 1) {
+      //         newQueueIndex = 0;
+      //       }
+      //       let newDecision = this.decisionQueue[newQueueIndex];
+      //       this.selectedCell = newDecision.rootCell;
+      //       this.$store.commit('changeEditDirection', newDecision.direction);
+      //       this.cellGrid = newDecision.board;
+      //       this.getWordsNeeded();
+      //       // doubleIndex -= 1;
+      //       repetitions -= 1;
+      //     })
+      //   } else { 
+      //     if (!this.completeWords.includes(doubleIndex)) {
+      //       this.completeWords.push(doubleIndex);
+      //     }
+          
+      //     if (repetitions > 0 && repetitions % 2 === 1) {
+      //       doubleIndex += 1;
+      //       if (doubleIndex >= this.doubleRootCells.length) {
+      //         doubleIndex -= this.doubleRootCells.length;
+      //         console.error('ACCOMPLISHED');
+      //         this.generating = false;
+      //         return;
+      //       }
+      //       this.selectedCell = this.cellGrid.flat()[this.doubleRootCells[doubleIndex]];
+      //     }
+      //     repetitions += 1;
+      //   }
+      // }
+      // this.generating = false;
+      // console.error('AUTO STOPPED _______________________')
+
+    },
+    async fillDoubleRoots() {
+      console.error('attempting to fill', this.doubleRootCells.length, 'double roots')
+      this.getWordsNeeded();
+      this.violatingCells = [];
+      let filled = false;
+      this.generating = true;
+      let repetitions = 0;
+      let limit = 500;
+      let doubleIndex = 0;
+      let startingCell = this.selectedCell || this.cellGrid.flat()[this.doubleRootCells[0]];
+      let currentEditDirection = this.$store.state.editDirection;
+      this.selectedCell = startingCell;      
+      this.generating = true;
+      this.decisionQueue = [];
+      while (this.generating && !filled && repetitions < limit) {
+        await this.wait(5);
+        let checkDirection;
+        if (repetitions % 2  === 0) {
+          checkDirection = 'across';
+        } else {
+          checkDirection = 'down';
+        }
+        let validateResult = await this.fillWithValidatedWord(null, this.selectedCell, checkDirection);
+        if (!validateResult) {
+          requestAnimationFrame(() => {
+            if (this.decisionQueue.length > 1) {
+              let newQueueIndex;
+              if (this.decisionQueue.length > 1) {
+                this.decisionQueue.length = this.decisionQueue.length - 1;
+                newQueueIndex = this.decisionQueue.length - 1;
+              } else if (this.decisionQueue.length === 1) {
+                newQueueIndex = 0;
+              }
+              let newDecision = this.decisionQueue[newQueueIndex];
+              this.selectedCell = newDecision.rootCell;
+              this.$store.commit('changeEditDirection', newDecision.direction);
+              this.cellGrid = newDecision.board;
+              this.getWordsNeeded();
+              // doubleIndex -= 1;
+              repetitions -= 1;
+            } else {
+              console.error('all out of luck here');
+              this.generating = false;
+              return;
+            }
+          })
+        } else { 
+          if (!this.completeWords.includes(doubleIndex)) {
+            this.completeWords.push(doubleIndex);
+          }
+          
+          if (repetitions > 0 && repetitions % 2 === 1) {
+            doubleIndex += 1;
+            if (doubleIndex >= this.doubleRootCells.length) {
+              doubleIndex -= this.doubleRootCells.length;
+              console.error('ACCOMPLISHED');
+              this.generating = false;
+              return;
+            }
+            this.selectedCell = this.cellGrid.flat()[this.doubleRootCells[doubleIndex]];
+          }
+          repetitions += 1;
+        }
+      }
+      this.generating = false;
+      console.error('AUTO STOPPED _______________________')
+
+    },
+    async autoFillBoard() {
+      this.usedWords = [];
+      this.completeWords = [];
+      this.getWordsNeeded();
+      await this.fillDoubleRoots();
+      this.generating = false;
+      requestIdleCallback(async () => {
+        // this.selectedCell = this.decisionQueue[0].rootCell;
+        // this.decisionQueue = [];
+        // console.warn('beginning next phase');
+        // await this.fillSingleRoots();
+      })
+    },
+    async autoFill(repeat) {
+      // this.clearLetters();
+      if (repeat !== true) {
+        console.log('recording!')
+        console.log('recording board! -------------------')
+        console.log('recording!')
+        this.originalBoard = JSON.parse(JSON.stringify(this.cellGrid));
+        this.usedWords.length = 0;
+      }
+        this.decisionQueue.length = 0;
+      this.violatingCells = [];
+      this.highlightedWords = { across: [], down: [] };
+      // this.problemPatterns = [];
+      let problemPatterns = [];
+      const allCells = this.cellGrid.flat();
+      let currentRootCell;
+      if (this.selectedCell) {
+        currentRootCell = this.selectedCell;
+      } else {
+        currentRootCell = allCells.filter(cell => cell.number === 1)[0];
+        this.selectedCell = currentRootCell;
+      }
+      let currentEditDirection = this.$store.state.editDirection;      
+      this.getWordsNeeded();
+      // let currentRootCell = allCells[this.doubleRootCells[0]];
+      // this.$store.commit('changeEditDirection', 'across');
+      const choiceSequence = [];
+      let filledWords = { across: [], down: [] }; // contain cell numbers
+      let iterations = 0;
+      let repetitions = 0;
+      let onWordIndex = { across: 0, down: 0 };
+      let changedCells = [];
+      const limit = 1;
+      // console.error('<<<<< STARTING AUTOFILL')
+      // console.warn('<<<<<<', this.$store.state.editDirection,  '>>>>>>')
+      // console.error('<<<<< STARTING AUTOFILL')
+      this.generating = true;
+      // iterations && await this.wait(500);
+      
+      // find and fill an initial word
+      let choices = await this.findWord();
+      if (typeof choices !== 'object') {
+        console.error('NOTHING FOUND FOR initial word!', currentRootCell.number, currentEditDirection);
+        this.cellGrid = this.decisionQueue[0].board;
+        this.getWordsNeeded();
+        this.selectedCell = undefined;
+        this.generating = false;
+        this.violatingCells.length = 0;
+        return;
+      }
+      choices = choices.filter(wordObj => !this.usedWords.includes(wordObj.word))
+      if (!choices.length) {
+        console.error('NO CHOICES FOR initial word!', currentRootCell.number, currentEditDirection);
+        this.cellGrid = this.decisionQueue[0].board;
+        this.getWordsNeeded();
+        this.selectedCell = undefined;
+        this.generating = false;
+        this.violatingCells.length = 0;
+        return
+      }
+      let chosenWord = choices[0];
+      let consequencesOkay = true;
+      // console.error('INITIAL WORD IS', chosenWord.word)
+      this.fillWithWord(chosenWord.word, currentRootCell.number, this.$store.state.editDirection);
+      let oldBoard = JSON.parse(JSON.stringify(this.cellGrid));
+      console.log('justtfilled initial with', chosenWord.word, this.$store.state.editDirection);
+      currentEditDirection = this.$store.state.editDirection;
+      this.decisionQueue.push({
+        board: oldBoard,
+        rootCell: currentRootCell,
+        direction: currentEditDirection,
+        word: chosenWord
+      });      
+      // this.usedWords.push(chosenWord.word);
+      // console.warn('recorded decision currentRootCell', currentRootCell.number, this.$store.state.editDirection, chosenWord.word)
+
+      let changedNumbers = [];
+
+      // fill root words of opposite direction
+      let originalWordObj = this.wordsNeeded[this.$store.state.editDirection].filter(obj => obj.letterIndexes[0] === currentRootCell.index)[0];
+      if (!this.completeWords.includes(originalWordObj)) {
+        this.completeWords.push(originalWordObj)
+      }
+      this.$store.dispatch('toggleDirection')
+
+      let chosenCrossWord;
+      
+      for (let i = 0; i < originalWordObj.letterIndexes.length; i += 1) {        
+        let ind = originalWordObj.letterIndexes[i];
+        let oppositeRootWords = this.getRootWords(ind)[this.$store.state.editDirection];
+        currentRootCell = allCells[oppositeRootWords.letterIndexes[0]];
+        this.selectedCell = currentRootCell;
+        let foundWords = await this.findWord();
+        if (typeof foundWords === 'object') {
+          foundWords = foundWords.filter(wordObj => !this.usedWords.includes(wordObj.word))
+          if (!foundWords.length) {
+            break;
+          }
+          chosenCrossWord = foundWords[0];       
+          oldBoard = JSON.parse(JSON.stringify(this.cellGrid));   
+          this.fillWithWord(chosenCrossWord.word, currentRootCell.number, this.$store.state.editDirection);
+          // this.usedWords.push(chosenCrossWord.word);
+          let changedCells = this.getChangedCells(oldBoard);
+          // console.log(chosenCrossWord.word, 'changed', changedCells.length)
+          changedCells.forEach(cell => {
+            let rootWords = this.getRootWords(cell.index);
+            if (!changedNumbers.includes(rootWords.across.number)) {
+              changedNumbers.push(rootWords.across.number);
+            }
+            if (!changedNumbers.includes(rootWords.down.number)) {
+              changedNumbers.push(rootWords.down.number);
+            }
+          });
+          // console.log('changedNumbers', changedNumbers)
+          if (changedNumbers.length) {
+            consequencesOkay = await this.validateWordSpaces(changedNumbers);
+            if (consequencesOkay) {
+              // console.warn('recorded decision', currentRootCell.number, this.$store.state.editDirection, chosenCrossWord.word.toUpperCase())
+              // oldBoard = JSON.parse(JSON.stringify(this.cellGrid));
+              currentEditDirection = this.$store.state.editDirection;
+              this.decisionQueue.push({
+                board: oldBoard,
+                rootCell: currentRootCell,
+                direction: currentEditDirection,
+                word: chosenCrossWord
+              });
+              let wordObj = this.wordsNeeded[this.$store.state.editDirection].filter(obj => obj.letterIndexes[0] === currentRootCell.index)[0];
+
+              if (!this.completeWords.includes(wordObj)) {
+                this.completeWords.push(wordObj)
+              }
+              this.usedWords.push(chosenCrossWord.word);
+            } else {
+              console.error('CROSS WORD', chosenCrossWord.word, 'WAS NOT OKAY');
+              this.cellGrid = oldBoard;
+              break;
+            }
+          } else {
+            break;
+          }
+        }
+
+      }
+
+      iterations += 1;
+
+      // consequencesOkay = await this.validateWordSpaces();
+
+      if (consequencesOkay) {
+        // end 
+        this.decisionQueue.length = 1;
+        console.error('ALL CROSSWORDS FOR', this.decisionQueue[0].rootCell.number, this.decisionQueue[0].direction, this.decisionQueue[0].word.word.toUpperCase(), 'VIABLE!');
+        // console.error('---->', chosenCrossWord.word)
+        // this.cellGrid = this.decisionQueue[0].board;
+        // this.getWordsNeeded();
+        this.selectedCell = undefined;
+        this.generating = false;
+        this.violatingCells.length = 0;        
+      } else {
+        console.error('CROSSWORDS OF', this.decisionQueue[0].rootCell.number, this.decisionQueue[0].direction, this.decisionQueue[0].word.word.toUpperCase(), 'TRIED AN UNFINDABLE PATTERN!');
+        // console.error('---->', chosenCrossWord.word)
+        this.completeWords.splice(this.completeWords.indexOf(originalWordObj), originalWordObj.letterIndexes.length - 1);
+        await this.wait(5)
+        requestIdleCallback(() => {
+          if (this.decisionQueue.length > 1) {
+            this.decisionQueue.length = this.decisionQueue.length - 1;
+          }
+          // this.decisionQueue.length = 1;
+          let newQueueIndex = this.decisionQueue.length - 1;
+          const newDecisionPoint = this.decisionQueue[newQueueIndex];
+          console.warn('reverting to decision point', newDecisionPoint.rootCell.number, newDecisionPoint.direction)
+          currentRootCell = newDecisionPoint.rootCell;
+          this.selectedCell = currentRootCell;
+          this.$store.commit('changeEditDirection', newDecisionPoint.direction);
+          let restoredBoard = newQueueIndex > 0 ? newDecisionPoint.board : this.originalBoard;
+          this.cellGrid = restoredBoard;       
+          this.getWordsNeeded();
+          requestIdleCallback(() => {
+            if (this.generating) {
+              this.autoFill(true);
+            }
+          })
+          // this.generating = false;
+        })
+      }
+      
+    },
+    async validateWordSpaces(onlyCheckNumbers, onlyDirection) {
+      this.violatingCells = [];
+      this.viableWords = [];
+      let problemPatterns = [];
+      let allValid = true;
+      let allCells = this.cellGrid.flat();
+      let wordsNeededAcross = this.wordsNeeded.across;
+      let wordsNeededDown = this.wordsNeeded.down;
+      if (onlyCheckNumbers && onlyCheckNumbers.length) {
+        wordsNeededAcross = this.wordsNeeded.across.filter(wordObj => onlyCheckNumbers.includes(wordObj.number))
+        wordsNeededDown = this.wordsNeeded.down.filter(wordObj => onlyCheckNumbers.includes(wordObj.number))
+      }
+      if (onlyDirection === 'across') {
+        wordsNeededDown = [];
+      }
+      if (onlyDirection === 'down') {
+        wordsNeededAcross = [];
+      }
+      // console.warn('VALIDATING ----', wordsNeededAcross.length, ' across words')
+      // console.warn('VALIDATING ----', wordsNeededDown.length, ' down words')
+      for (let i = 0; i < wordsNeededAcross.length; i += 1) {
+        let wordObj = wordsNeededAcross[i]
+        let startingIndex = allCells[wordObj.letterIndexes[0]];
+        let acrossChoices = await this.getWordChoices(null, startingIndex, 'across');
+        if (typeof acrossChoices === 'object') {
+          wordObj.choices = acrossChoices
+        } else {
+          // console.error(acrossChoices, wordObj.word, wordObj.number, 'across has no word choices!');
+          problemPatterns.push(acrossChoices)
+          allValid = false;
+          break;
+        }
+      }
+      for (let i = 0; i < wordsNeededDown.length; i += 1) {
+        let wordObj = wordsNeededDown[i]
+        let startingIndex = allCells[wordObj.letterIndexes[0]];
+        let downChoices = await this.getWordChoices(null, startingIndex, 'down');
+        if (typeof downChoices === 'object') {
+          wordObj.choices = downChoices
+        } else {
+          problemPatterns.push(downChoices)
+          allValid = false;
+          break;
+        }
+      }
+      problemPatterns.forEach(pat => {
+        let matchingEntries = this.problemPatterns.filter(entry => entry.pattern === pat);
+        if (matchingEntries.length) {
+          // console.warn('found', matchingEntries.length, 'entries for', pat);
+          let index = this.problemPatterns.indexOf(matchingEntries[0])
+          this.problemPatterns[index].quantity += 1;
+        } else {
+          this.problemPatterns.push({
+            pattern: pat,
+            quantity: 1
+          })
+        }
+      })
+      // if (this.problemPatterns.length > 100) {
+      //   let overage = this.problemPatterns.length - 100;
+      //   this.problemPatterns = this.problemPatterns.sort((a , b) => b.length - a.length).splice(overage, this.problemPatterns.length);
+      // }        
+      return allValid;
     },
     async fillBoard() {
+      let problemPattern;
       const allCells = this.cellGrid.flat();
       let currentRootCell = this.selectedCell ? this.selectedCell : allCells.filter(cell => cell.number === 1)[0];
       this.selectedCell = currentRootCell;
       this.$store.commit('changeEditDirection', 'across');
       const choiceSequence = [];
-      const checkQueue = [{ direction: this.$store.state.editDirection, cellIndex: currentRootCell.index }];
-      let filledWords = { across: [], down: [] };
+      const decisionQueue = [];
+      let usedWords = []; // contains wordObj.ids
+      let filledWords = { across: [], down: [] }; // contain cell numbers
       let iterations = 0;
       let repetitions = 0;
       let onWordIndex = { across: 0, down: 0 };
+      let changedCells = [];
       const limit = 225;
       this.generating = true;
-      console.log('started');
       while(this.generating && iterations < limit) {
-        iterations && await this.wait(3);
+        iterations && await this.wait(0);
         const oldBoard = JSON.parse(JSON.stringify(this.cellGrid));
-        const wordOptions = await this.findWord();
-        if (!wordOptions) {
+        let wordOptions = await this.findWord();
+        while (typeof wordOptions !== 'object') {
           console.error('NO WORDS FOUND FOR', currentRootCell.number, this.$store.state.editDirection);
-          let cellArr = this.wordsNeeded[this.$store.state.editDirection].filter(wordObj => wordObj.letterIndexes.includes(this.selectedCell.index))[0].letterIndexes;
-          console.log('cellArr', cellArr)
-          this.violatingCells.push(...cellArr)
+          // let cellArr = this.wordsNeeded[this.$store.state.editDirection].filter(wordObj => wordObj.letterIndexes.includes(this.selectedCell.index))[0].letterIndexes;
+          // this.violatingCells.push(...cellArr)
+          problemPattern = wordOptions;
+          let previousDirection = decisionQueue[iterations - 1].direction;
+          this.$store.commit('changeEditDirection', previousDirection);
+          let previousCellIndex = decisionQueue[iterations - 1].cellIndex;
+          currentRootCell = allCells[previousCellIndex];
+          this.selectedCell = currentRootCell;
+          // this.eraseWord(this.selectedCell, this.$store.state.editDirection, changedCells)
+          let previousWord = decisionQueue[iterations - 1].word;
+          console.warn('we getting a replacement word for', this.selectedCell.number, previousDirection, newBlank)
+          let newBlank = '*'.repeat(previousWord.length);
+          this.fillWithWord(newBlank, currentRootCell.number, previousDirection);
+          wordOptions = await this.findWord(previousDirection);
+
+          // console.error('MOVED BACKQ to number', previousCellIndex, this.$store.state.editDirection)
+          // console.error('now options is', wordOptions)
+          // break;
+        }
+        iterations += 1;
+                
+        // wordOptions = wordOptions.sort((a, b) => this.scrabbleScore(a.word) - this.scrabbleScore(b.word));
+        const foundWord = wordOptions.filter(wordObj => !usedWords.includes(wordObj.id))[0];
+        if (!foundWord) {
+          console.error('DIDNAE FIND A foundWord!!');
           break;
         }
-        const foundWord = wordOptions[randomInt(0, wordOptions.length - 1)];
-        this.fillWithWord(foundWord.word, currentRootCell.number, this.$store.state.editDirection);
-            
-        // const changedCells = this.getChangedCells(oldBoard);
-        // console.log(foundWord.word, 'changed', changedCells);
-        // console.log('going for foundWord', foundWord)
+        this.fillWithWord(foundWord.word, currentRootCell.number, this.$store.state.editDirection);       
+
+        changedCells = this.getChangedCells(oldBoard);
+        let rootCellsToTest = [];
+        changedCells.forEach(cell => {
+          rootCellsToTest.push(this.getRootWords(cell.index).across.letterIndexes[0]);
+          rootCellsToTest.push(this.getRootWords(cell.index).down.letterIndexes[0]);
+        });
+
+        let changedOk = true;
+        let tested = 0;
+
+        while (tested < rootCellsToTest.length) {
+          let testCell = allCells[rootCellsToTest[tested]];
+          this.selectedCell = testCell;
+          let wordOptions = await this.findWord();
+          if (typeof wordOptions !== 'object') {
+            changedOk = false;
+            console.error('#$#$#$#$$$$$$$$$$#$#$#$')
+            console.error(rootCellsToTest[tested], 'no good!')
+            console.error('#$#$#$#$$$$$$$$$$#$#$#$')
+            // break;
+          }
+          tested += 1
+        }
+
+        if (!changedOk) {
+          console.error('POTENTIAL CHANGED HAVE NO WORDS')
+          break;
+        }
+
+        usedWords.push(foundWord.id);
+        decisionQueue.push({
+          direction: this.$store.state.editDirection,
+          cellIndex: this.selectedCell.index,
+          wordId: foundWord.id,
+          word: foundWord.word
+        });
+        filledWords[this.$store.state.editDirection].push(currentRootCell.number)
 
         this.$store.dispatch('toggleDirection');
 
@@ -1795,14 +3099,44 @@ export default {
         //   checkQueue.push({ direction: currentEditDirection, cellIndex: rootWords[currentEditDirection].letterIndexes[0]});        
         // });
 
-        iterations += 1;
+        
 
         // const nextRootCellIndex = this.getRootWords(changedCells[onWordIndex].index)[this.$store.state.editDirection].letterIndexes[0];
         let currentWordList = this.wordsNeeded[this.$store.state.editDirection];
         let currentWord = currentWordList.filter(wordObj => wordObj.letterIndexes.includes(this.selectedCell.index))[0];
-
-        const nextRootCellIndex = currentWordList[onWordIndex[this.$store.state.editDirection]].letterIndexes[0];
-        console.log('nextrootcelli', nextRootCellIndex);
+        // const nextRootCellIndex = currentWordList[onWordIndex[this.$store.state.editDirection]].letterIndexes[0];
+        let nextRootCellIndex;
+        if (this.$store.state.editDirection === 'across') {
+          let targetRow;
+          if (currentRootCell.row <= this.boardSize.height - 1) {
+            targetRow = currentRootCell.row + 1
+          } else {
+            targetRow = currentRootCell.row
+          }
+          nextRootCellIndex = allCells.filter(cell => {
+            let qualifies = false;
+            let hasAcrossWord = cell.number && this.getRootWords(cell.index).across.number === cell.number;
+            if (hasAcrossWord && !filledWords.across.includes(cell.number) && cell.row >= targetRow) {
+              qualifies = true;
+            }
+            return qualifies;
+          })[0].index;
+        } else {
+          let targetColumn;
+          if (currentRootCell.column <= this.boardSize.width - 1) {
+            targetColumn = currentRootCell.column + 1
+          } else {
+            targetColumn = currentRootCell.column
+          }
+          nextRootCellIndex = allCells.filter(cell => {
+            let qualifies = false;
+            let hasDownWord = cell.number && this.getRootWords(cell.index).down.number === cell.number;
+            if (hasDownWord && !filledWords.down.includes(cell.number) && cell.column >= targetColumn) {
+              qualifies = true;
+            }
+            return qualifies;
+          })[0].index;
+        }
         currentRootCell =  allCells[nextRootCellIndex];
         if (onWordIndex[this.$store.state.editDirection] <  currentWordList.length) {
           onWordIndex[this.$store.state.editDirection] += 1;
@@ -1812,6 +3146,7 @@ export default {
         requestAnimationFrame(() => {
           this.selectedCell = currentRootCell;
         })
+
       }
       
       this.generating = false;
@@ -1820,83 +3155,79 @@ export default {
       }
       this.$store.commit('changeEditDirection', 'across');
       this.selectedCell = undefined;
-      this.highlightedWords = [];
-      console.error('///////////////////////////////////////////')      
+      this.highlightedWords = { across: [], down: [] };
+      console.error('///////////////////////////////////////////')
+      return {problemPattern, decisionQueue, iterations};
     },
 
-    async fillBoard2() {
-      const allCells = this.cellGrid.flat();
-      const checkQueue = [];
-      let currentRootCell = allCells.filter(cell => cell.number === 1)[0];
-      this.selectedCell = currentRootCell;
-      let currentEditDirection = 'across';
-      this.$store.commit('changeEditDirection', currentEditDirection);
-      let filledWords = []; // index in this.wordsNeeded
-      let iterations = 0;
-      let repetitions = 0;
-      const limit = 600;
-      this.generating = true;
-      while(this.generating && iterations < limit) {
-        // get a word for the current selectedCell and editDirection
-        let foundWord = await this.findWord();
-        if (!foundWord) {
-          console.error('///////////////// NO WORD FOUND FOR', currentRootCell.number, currentEditDirection);
-          break;
-        }
-        console.warn('---- iteration', iterations, 'found word', foundWord.toUpperCase(), 'for', this.selectedCell.number, currentEditDirection);
-        // find the cell at the end of that word
-        const newestWord = this.wordsNeeded[currentEditDirection].filter(wordObj => wordObj.number === currentRootCell.number)[0];
-        const neededIndex = this.wordsNeeded[currentEditDirection].indexOf(newestWord);
-        let rootFromIndex = newestWord.word.length - 1;
-        if (filledWords.includes(neededIndex)) {
-          console.error('///////// tried same word again for', repetitions, 'times');
-          repetitions += 1;
-          if (repetitions === 12) {
-            console.error('TOO MANY SAME TIME :(');
-            break;
-          }
-          rootFromIndex = 0;
+    scrabbleScore(word) {
+      let score = 0
+      for (var c=0;c<word.length;c++) {
+          var char = word[c]
+          score += scrabbleScores[char]
+      }
+      return score
+    },
+
+    getAdjacentNonBlankCell(startingCell, direction) {
+      let allCells = this.cellGrid.flat();
+      let result;
+      if (direction === 'east') {
+        if (!startingCell.shaded && 
+        startingCell.column !== this.boardSize.width - 1 &&
+        allCells[this.selectedCell.index + 1] && !allCells[this.selectedCell.index + 1].shaded ) {
+          result = allCells[this.selectedCell.index + 1];
+        }        
+      } else if (direction === 'south') {
+        if (!startingCell.shaded && 
+        allCells[startingCell.index + this.boardSize.width] && !allCells[startingCell.index + this.boardSize.width].shaded ) {
+          result = allCells[this.selectedCell.index + this.boardSize.width]
+        }        
+      } else if (direction === 'west') {
+        if (!startingCell.shaded && 
+        startingCell.column !== 0 &&
+        allCells[this.selectedCell.index - 1] && !allCells[this.selectedCell.index - 1].shaded ) {
+          result = allCells[this.selectedCell.index - 1];
+        }        
+      } else if (direction === 'north') {
+        if (!startingCell.shaded &&
+        allCells[startingCell.index - this.boardSize.width] && !allCells[startingCell.index - this.boardSize.width].shaded ) {
+          result = allCells[this.selectedCell.index - this.boardSize.width]
+        }        
+      }
+      return result;
+    },
+
+    handleClickKey(e) {
+      let allCells = this.cellGrid.flat();
+      let targetCell = this.selectedCell;
+      let moveDirection;
+      let char = e.target.innerText;
+      if (this.$store.state.editDirection === 'across') {
+        if (char === 'DEL') {
+          char = '';
+          moveDirection = 'west';
         } else {
-          repetitions = 0;
-          filledWords.push(neededIndex)
+          moveDirection = 'east';
         }
-        const wordEndCell = allCells[newestWord.letterIndexes[rootFromIndex]];
-
-        console.log('rootFromIndex cell is', wordEndCell.row, wordEndCell.column, wordEndCell.number, wordEndCell.letter)
-
-        // turn
-        currentEditDirection = currentEditDirection === 'across' ? 'down' : 'across';    
-        console.error('TURNING', currentEditDirection);
-        this.$store.commit('changeEditDirection', currentEditDirection);
-
-        // get that cell's root word from new direction
-        const endRootWord = this.getRootWords(wordEndCell.index)[currentEditDirection];
-        if (!endRootWord) {
-          console.error(currentEditDirection, 'had no endRootWord /////////////////////////');
-          break;
+      } else {
+        if (char === 'DEL') {
+          char = '';
+          moveDirection = 'north';
+        } else {
+          moveDirection = 'south';
         }
-        console.error(currentEditDirection, 'root word of word end cell of', foundWord.toUpperCase(), 'is', endRootWord.number, currentEditDirection);
-        // change selected cell to that word's starting letter
-        const nextCellIndex = endRootWord.letterIndexes[0];
-
-        // requestIdleCallback(() => {
-          currentRootCell = allCells[nextCellIndex];
-          this.selectedCell = currentRootCell;
-        // });
-        console.log('filled', filledWords.length, 'words')
-        iterations += 1;
       }
-      this.generating = false;
-      if (iterations === limit) {
-        console.error('TIMED OUT!! -----------')
+      this.selectedCell.letter = char;
+      let newSelectedCell = this.getAdjacentNonBlankCell(targetCell, moveDirection);
+      if (newSelectedCell) {
+        this.selectedCell = newSelectedCell;       
+      } else {
+        this.$store.commit('changeEnteringLetters', false);
+        this.$store.commit('toggleKeyboard');
       }
-      this.selectedCell = undefined;
-      this.highlightedWords = [];
-      console.error('///////////////////////////')
-      console.error('/////////////////////////////////')
-      console.error('//////////////////////////////////////')
-      console.error('///////////////////////////////////////////')      
     },
+
     async scanBoardForImage() {
       // let boardDiv = document.getElementById('puzzle-board');
       // let image = document.getElementById('board-image');
@@ -2005,7 +3336,7 @@ export default {
   width: 100vw;
   height: var(--view-height);
   background: #000000dd;
-  z-index: 1;
+  z-index: 2;
 }
 .board-area {
 	height: 100%;
@@ -2027,12 +3358,14 @@ export default {
   border-top: calc(var(--header-height) / 4) solid var(--secondary-text-color);
 }
 .clue-display {
-  color: var(--secondary-text-color);
+  /* color: var(--secondary-text-color); */
+  color: white;
   font-weight: bold;
   width: 100%;
   flex-grow: 1;
   justify-self: flex-start;
   position: relative;
+  background-color: #222;
 }
 .expand-button {
   font-weight: bold;
@@ -2073,14 +3406,17 @@ export default {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  border: 1px solid #666;
+  border-radius: calc(var(--main-padding) / 2);
+  padding: 0 calc(var(--main-padding) / 2);
 }
 .clue-list > .word-clue-entry {
-  padding: calc(var(--main-padding) / 2);
+  padding: var(--main-padding) calc(var(--main-padding) / 2);
   display: grid;
   grid-template-columns: auto 1fr auto;
   grid-template-rows: auto 1fr;
-  /* align-items: center; */
-  /* border-bottom: 1px solid var(--secondary-text-color); */
+  /* align-items: center; */  
+  border-bottom: 1px solid #666;
 }
 .word-clue-entry > div:nth-child(1) {  
   width: 2rem;
@@ -2103,17 +3439,22 @@ export default {
   padding: calc(var(--main-padding) / 2);
   padding-left: 0;
 }
+.word-clue-entry:last-child {
+  border-bottom: 0;
+}
 .word-clue-entry > button:active {
   background-color: #333;
 }
 .word-clue-entry > button {
-  grid-row-start: 2;
+  grid-row-start: 1;
+  grid-row-end: span 2;
   grid-column-start: 3;
   display: flex;
   justify-content: space-between
 }
-.direction-label {
-  border-bottom: 1px solid var(--secondary-text-color);
+.clue-display h1.direction-label {
+  font-size: 1.75rem;
+  padding: calc(var(--main-padding) / 2) var(--main-padding);
 }
 @media (orientation: landscape) {
 	.board-area {

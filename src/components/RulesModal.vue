@@ -65,7 +65,7 @@ export default {
   border-radius: calc(var(--main-padding) / 3);
 	box-shadow: 1px 1px calc(var(--main-padding) / 2) #00000066,
 		-1px -1px calc(var(--main-padding) / 2) #00000066;
-  z-index: 1;
+  z-index: 2;
 }
 .rules-modal > * {
   /* outline: 1px solid red; */

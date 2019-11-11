@@ -43,13 +43,13 @@ export default {
 }
 @keyframes spin {
   0% {
-    transform: rotate(0) scale(1);
+    transform: rotate(0);
   }
-  50% {
+  /* 50% {
     transform: rotate(calc(180deg * var(--spin-direction))) scale(1.3);
-  }
+  } */
   100% {
-    transform: rotate(calc(360deg * var(--spin-direction))) scale(1);
+    transform: rotate(calc(360deg * var(--spin-direction)));
   }
 }
 </style>

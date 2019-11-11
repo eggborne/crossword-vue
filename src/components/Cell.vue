@@ -1,10 +1,21 @@
 <template>
 	<div 
-    :class='[`cell`, selected && `selected`, highlighted && `highlighted`, violating && `violating`, shaded && `shaded`]'
+    :class='[
+      `cell`, 
+      selected && `selected`, 
+      highlighted && `highlighted`, 
+      themeWordAcross && `theme-word across`,
+      themeWordDown && `theme-word down`,
+      themeEnd,
+      viable && `viable`, 
+      violating && `violating`, 
+      shaded && `shaded`      
+    ]'
     v-on:pointerdown='handleClick'
   >
     <div class='number'>{{ number }}</div>
-    <div class='letter'>{{ letter }}</div>
+    <div :style='{ opacity: !(selected && $store.state.enteringLetters) ? 1 : 0.5 }' class='letter'>{{ letter }}</div>
+    <!-- <div class='letter'>{{ !(selected && $store.state.enteringLetters) ? letter : '' }}</div> -->
     <slot></slot>
   </div>
 </template>
@@ -17,11 +28,15 @@ export default {
     shaded: Boolean,
     selected: Boolean,
     highlighted: Boolean,
+    viable: Boolean,
     violating: Boolean,
     letter: '', 
     number: '',
     row: Number,
     column: Number,
+    themeWordAcross: Boolean,
+    themeWordDown: Boolean,
+    themeEnd: String,
     handleClick: Function
   },
   created() {
@@ -33,7 +48,7 @@ export default {
 </script>
 
 <style scoped>
-.cell {
+.cell {  
 	position: relative;
   /* outline: calc(var(--cell-width) / 24) solid var(--blank-color);   */
   outline: 1px solid var(--blank-color);  
@@ -48,25 +63,20 @@ export default {
   z-index: 1;
   text-transform: uppercase;  
 }
+.cell:not(.arrow-cell):after {
+  content: '';
+  position: absolute;
+  width: inherit;
+  height: inherit;
+  display: none;
+  pointer-events: none;
+  border: calc(var(--cell-width) / 10) solid var(--highlight-outline-color);
+}
 .cell:before {
   content: '';
   position: absolute;
   width: inherit;
   height: inherit;
-  background: var(--theme-word-color);
-  /* border: calc(var(--cell-width) / 8) solid var(--theme-word-color); */
-  /* display: none; */
-  opacity: 0;
-  pointer-events: none;
-}
-.cell:after {
-  content: '';
-  position: absolute;
-  width: inherit;
-  height: inherit;
-  background: var(--theme-word-color-2);
-  /* border: calc(var(--cell-width) / 8) solid var(--theme-word-color-2); */
-  /* display: none; */
   opacity: 0;
   pointer-events: none;
 }
@@ -76,21 +86,59 @@ export default {
 .cell.shaded {
   background-color: var(--blank-color);
 }
-.cell.theme-word:before, .cell.theme-word-2:after {
-  opacity: 0.25;
+.cell.theme-word {
+  z-index: 2;
+}
+.cell.theme-word:after {
+  display: block;
+}
+.cell.theme-word.across:after {
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+.cell.theme-word.down:after {
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+}
+.cell.theme-word.top:after {
+  border-top-color: var(--highlight-outline-color);
+}
+.cell.theme-word.bottom:after {
+  border-bottom-color: var(--highlight-outline-color);
+}
+.cell.theme-word.left:after {
+  border-left-color: var(--highlight-outline-color);
+}
+.cell.theme-word.right:after {
+  border-right-color: var(--highlight-outline-color);
 }
 .cell.violating {
-  background: rgba(255, 0, 0, 0.128);
+  background: rgba(255, 0, 0, 0.2) !important;
+  animation: none !important;
 }
 .cell.highlighted {
-  background:rgba(0, 128, 0, 0.27);
+  background:rgba(0, 0, 128, 0.27);    
+  animation: cell-pulse;
+}
+
+.cell.highlighted {
+  animation-play-state: running;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease;
+  animation-fill-mode: forwards;
+  animation-direction: alternate;
+  animation-duration: 500ms;
+}
+.cell.viable {
+  background: rgba(0, 128, 0, 0.27);
 }
 .cell.selected {
   /* background: #00ff0099 !important; */
-  outline: calc(var(--cell-width) / 6) solid green;
+  outline: calc(var(--cell-width) / 8) solid green;
+  z-index: 4;
 }
-.cell.shaded {
-  /* background: var(--blank-color) !important; */
+.cell.selected::after {  
+  border-width: 0;
 }
 .cell > .number {
   position: absolute;

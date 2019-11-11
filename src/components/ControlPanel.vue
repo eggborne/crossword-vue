@@ -1,30 +1,72 @@
 <template>
 	<div class="control-panel" :class='[busy && `busy`, $store.state.editMode === `clues` && `minimal`]'>
-		<div v-if='$store.state.editMode !== `clues`' class='info-bar'>
+		<div v-if='$store.state.editMode === `diagram`' class='info-bar'>
 			<div v-if='busy' class='spinner-area'>
 				<Spinner :direction='-1'/>
-				<div class='loading-message'>GENERATING {{ Math.round((percentBlack / rules.blackRate) * 100) }}%</div>
+				<div class='loading-message'>
+					<div class='loading-bar'
+						:style='{ transform: `scaleX(${generationPercent / 100})` }'
+					></div>
+					GENERATING {{ Math.round(generationPercent) }}%
+				</div>
 				<Button :label='`STOP`' :handleClick='cancelGeneration' />
 			</div>
-			<div>Words: {{ `${wordsNeeded.across.length}/${wordsNeeded.down.length} (${wordsNeeded.across.length + wordsNeeded.down.length})` }}</div>
-			<div>Longest word: <span>{{ longestWordLengths[0] }}</span></div>
+			<div>Words: <span :style='{fontWeight: `bold`}'>{{ `${wordsNeeded.across.length}/${wordsNeeded.down.length} (${wordsNeeded.across.length + wordsNeeded.down.length})` }}</span></div>
+			<div>Long/Short: <span :style='{fontWeight: `bold`}'>{{ longestWordLengths[0] }} / {{ shortestWordLength }}</span></div>
 			<div :class='percentOffensiveClass'>{{ offensiveQuotient }}% offensive</div>
 			<div :class='[(!isContiguous && rules.contiguous) && `violating untrue`]'>Contiguous</div>
-			<div :class='shortestWordLength < rules.wordLengths.min ? `violating` : ``'>Shortest word: {{ shortestWordLength }}</div>
-			<div>{{ percentBlack }}% black</div>
+			<div>Shaded: <span :style='{fontWeight: `bold`}'>{{ percentBlack }}%</span></div>
 			<div :class='allCheckedClass'>All checked</div>
-			<div>
+			<!-- <div>
 				Theme words:
-				<span v-if='themeWords[0][0]'>
-					{{ themeWords[0].length }} x {{ themeWords[0][0].word.length }}
+				<span v-if='themeWords.across[0]'>
+					A: {{ themeWords.across.length }} x {{ themeWords.across[0].word.length }}
+				</span>
+				<span v-else-if='themeWords.down[0]'>
+					D: {{ themeWords.down.length }} x {{ themeWords.down[0] && themeWords.down[0].word.length }}
 				</span>
 				<span v-else>
 					None
-				</span>
-				<span v-if='themeWords[1][0]'>
-				, {{ themeWords[1].length }} x {{ themeWords[1][0].word.length }}
-				</span>
+				</span>			
+			</div> -->
+			<div></div>
+		</div>
+		<div v-else-if='$store.state.editMode === `puzzle` && !$store.state.enteringLetters' class='puzzle info-bar'>
+			<div v-if='busy' class='spinner-area'>
+				<Spinner :direction='-1'/>
+					<div class='loading-message'>
+						<div class='loading-bar'
+							:style='{ transform: `scaleX(${triedPercent / 100})` }'
+						></div>
+						<span v-if='loadingMessage'>
+							{{ loadingMessage }}
+						</span>
+						<span v-else-if='totalFillOptionAmount'>
+							TRYING {{ (totalFillOptionAmount - currentFillOptions.length + 1) }} 
+							OF {{ totalFillOptionAmount + 1 }}<br />for {{ selectedCell && selectedCell.number }} {{ $store.state.editDirection }}
+						</span>
+						<span v-else>
+							PREPARING WORD FILL...
+						</span>
+					</div>
+				<Button :label='`STOP`' :handleClick='cancelGeneration' />
 			</div>
+
+			<div>Words: <span :style='{fontWeight: `bold`}'>{{ `${wordsNeeded.across.length}/${wordsNeeded.down.length} (${wordsNeeded.across.length + wordsNeeded.down.length})` }}</span></div>
+			<div>Long/Short: <span :style='{fontWeight: `bold`}'>{{ longestWordLengths[0] }} / {{ shortestWordLength }}</span></div>
+			<div>Filled: <span :style='{fontWeight: `bold`}'>{{ filledPercent }}%</span></div>
+			<!-- <div>
+				Theme words:
+				<span v-if='themeWords.across[0]'>
+					A: {{ themeWords.across.length }} x {{ themeWords.across[0].word.length }}
+				</span>
+				<span v-else-if='themeWords.down[0]'>
+					D: {{ themeWords.down.length }} x {{ themeWords.down[0] && themeWords.down[0].word.length }}
+				</span>
+				<span v-else>
+					None
+				</span>			
+			</div> -->
 			<div></div>
 		</div>
 		<div v-if='$store.state.editMode===`diagram`' class='control-area'>
@@ -54,7 +96,7 @@
 				<!-- <Button :label="`Rules...`" :handleClick="handleClickRules" /> -->
 			</div>
 		</div>
-		<div v-else-if='$store.state.editMode===`puzzle`' class='control-area'>
+		<div v-else-if='$store.state.editMode===`puzzle`  && !$store.state.enteringLetters' class='control-area'>
 			<Button :label="`Clear all`" :handleClick="clearLetters" />
 			<Button 
 				:class='[(!selectedCell || !selectedCell.number || $store.state.enteringLetters) && `disabled`]' 
@@ -64,27 +106,34 @@
 			<Button 
 				:class='[!selectedCell && `disabled`, $store.state.enteringLetters && `highlighted`]' 
 				:label="`Edit Letter`"
-				:handleClick="() => $store.commit('changeEnteringLetters', !$store.state.enteringLetters)" 
+				:handleClick="() => { $store.commit('changeEnteringLetters', !$store.state.enteringLetters); $store.commit('toggleKeyboard') }" 
 			/>
-			<div></div>
+			<Button 
+				:class='[(!logItems.length && !$store.state.logOpen) && `disabled`, $store.state.logOpen && `highlighted`]' 
+				:label="`${$store.state.logOpen ? 'Close' : 'View'} Log ${(!$store.state.logOpen && logItems.length > 0) ? `(${logItems.length})` : ``}`"
+				:handleClick="() => $store.commit('toggleLog')" 
+			/>
 			<div class='generate-area'>
 				<Button :class='[busy && `disabled`]' :label="`Auto-Fill`" :handleClick="fillBoard" />				
-				<Button 
-					:label='`Rules`'
-					:handleClick='handleClickRules'
-				/>
+				<!-- <Button 
+					:label='`Validate`'
+					:handleClick='handleClickValidate'
+				/> -->
 			</div>
-			<div></div>
-			<Button :label="`Save new word`" :handleClick="handleClickToSaveWord" />
+			<Button :class='[!selectedCell && `disabled`]' :label="`Word choices`" :handleClick="handleClickToViewChoices" />
 		</div>
 		<div v-else-if='$store.state.editMode===`clues`' class='control-area'>
-
+			<Button :label="`Save new word`" :handleClick="handleClickToSaveWord" />
 		</div>
-		<div class='lower-area'>
+		<div v-if='!$store.state.keyboardOpen' class='lower-area'>
 			<ModeBar
 				:changeEditMode='changeEditMode'
 			/>
 		</div>
+		<Keyboard 
+			:class='[$store.state.keyboardOpen ? `` : `closed`]'
+			:handleClickKey='handleClickKey'
+		/>
 	</div>
 </template>
 
@@ -95,6 +144,8 @@ import ButtonSlider from './ButtonSlider';
 import SelectBar from './SelectBar';
 import ModeBar from './ModeBar';
 import Spinner from './Spinner';
+import Keyboard from './Keyboard';
+
 
 export default {
   name: 'ControlPanel',
@@ -135,11 +186,23 @@ export default {
     handleGetDiagrams: Function,
     handleClickGenerate: Function,
     handleClickRules: Function,
+		handleClickValidate: Function,
+		handleClickToViewChoices: Function,
 		cancelGeneration: Function,
 		changeEditMode: Function,
+		handleClickKey: Function,
 		findWord: Function,
 		fillBoard: Function,
-		themeWords: Array
+		themeWords: Object,
+		completeWords: Number,
+		doubleRootCells: Array,
+		currentFillOptions: Array,
+		totalFillOptionAmount: Number,
+		loadingMessage: String,
+		decisionQueue: Array,
+		logItems: Array,
+		iterations: Number,
+		viableCellAmount: Number
   },
   components: {
     Button,
@@ -147,11 +210,26 @@ export default {
     ButtonSlider,
 		SelectBar,
     ModeBar,
-    Spinner
+    Spinner,
+    Keyboard
 	},
   computed: {
 		rules() {
 			return this.$store.state.puzzleOptions.rules;
+		},
+		triedPercent() {
+			let percent;
+			return (((this.totalFillOptionAmount - this.currentFillOptions.length + 1) / this.totalFillOptionAmount) * 100);
+		},
+		generationPercent() {
+			let percent;
+			let totalCells = this.boardSize.width * this.boardSize.height;
+
+			percent = 100 - ((this.viableCellAmount / totalCells) * 100);						
+			return percent;
+		},
+		filledPercent() {
+			return Math.round((this.completeWords / (this.wordsNeeded.across.length + this.wordsNeeded.down.length)) * 100);
 		},
     longestWordLengths() {
 			let wordArray = Object.values(this.wordsNeeded).flat(2);
@@ -219,7 +297,14 @@ export default {
 	justify-content: space-between;
 }
 .control-panel.minimal {
-	height: min-content;
+	height: min-content;	
+}
+.control-panel.minimal > .control-area {
+	padding: var(--main-padding);
+}
+.control-panel.minimal > .control-area button {
+	grid-column-start: 4;
+	padding: var(--main-padding);
 }
 .untrue {
 	text-decoration: line-through;
@@ -233,6 +318,7 @@ export default {
 .control-area {
 	padding: 1% var(--main-padding);
 	/* height: calc(var(--header-height) * 2.75); */
+	max-width: 100%;
 	max-height: calc(var(--header-height) * 2.75);
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
@@ -241,9 +327,6 @@ export default {
 	flex-grow: 1;
 	justify-self: flex-start;
 	align-items: center;
-}
-.control-panel.minimal > .control-area {
-	padding: 0;
 }
 .control-panel.busy .info-bar > div:not(:first-child) {
 	opacity: 0.2;
@@ -257,20 +340,38 @@ export default {
 	top: 0%;
 	left: 50%;
 	display: grid;
-	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-columns:  calc(var(--header-height) * 2.5) 1fr calc(var(--header-height) * 2.5);
 	align-items: center;
 	align-content: center;
 	justify-items: center;
-	z-index: 1;
-	
+	z-index: 1;	
 }
 .spinner-area > .loading-message {
+	position: relative;
 	font-weight: 700;
-	font-size: 1rem;
+	font-size: 0.8rem;
 	text-shadow: -2px -1px 0 #00000088, 2px -1px 0 #00000088, -2px 1px 0 #00000088,
 		2px 1px 0 #00000088;
-		/* flex-grow: 1; */
-		width: max-content;
+	/* width: max-content; */
+	text-align: center;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+}
+.loading-bar {
+	transform-origin: left;
+	background: green;
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	z-index: -1;
+	transform: scaleX(0);
+	/* transition: transform 200ms linear; */
 }
 .spinner-area > .load-spinner {
 	width: calc(var(--header-height) / 1.75);
@@ -288,8 +389,10 @@ export default {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
 	padding: 0 calc(var(--main-padding) / 4);
+	grid-column-gap: calc(var(--main-padding) / 2);
 	box-sizing: content-box;
 	align-self: center;
+	align-items: center;
 	background: #00000055;
 	border-radius: calc(var(--main-padding) / 4);
 }
@@ -303,8 +406,7 @@ export default {
 	padding: calc(var(--main-padding) / 4); */
 }
 .generate-area > button {	
-	align-self: center;
-	width: 50%;
+	/* align-self: center; */
 }
 .generate-area > button:first-of-type {
 	border-right-color: #ffffff55;
@@ -319,10 +421,11 @@ export default {
 	grid-column-end: span 2;
 	padding: calc(var(--main-padding) / 2) 0;
 	font-size: 0.7rem;
-	height: calc(var(--header-height) * 1.5);
+	height: calc(var(--header-height) * 1.25);
+	max-height: calc(var(--header-height) * 1.25);
 	display: grid;
 	grid-template-columns: 1fr auto 1fr;
-	grid-row-gap: calc(var(--main-padding) / 4);
+	/* grid-row-gap: calc(var(--main-padding) / 4); */
 	justify-items: center;
 }
 .control-area button {
@@ -330,16 +433,17 @@ export default {
 	width: 100%;
 	height: 100%;
 	max-height: calc(var(--header-height));
+	/* padding: 0 calc(var(--main-padding) / 2); */
 }
 .lower-area {
 	display: flex;
 	justify-content: space-between;
-	justify-self: flex-end;
+	z-index: 1;
 }
 .mode-bar {
 	font-size: 0.8rem;
 	/* margin-top: var(--main-padding); */
-	/* align-self: flex-end; */
+	justify-self: flex-end;
 }
 #lower-area button {
 	font-size: 1rem;

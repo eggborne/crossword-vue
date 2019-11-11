@@ -27,6 +27,9 @@ export default new Vuex.Store({
       cellColor: '#ffffff',
       blankColor: '#060606'
     },
+    editorOptions: {
+      logLength: 100
+    },
     puzzleOptions: {
       rules: {
         themeWords: 2,
@@ -35,11 +38,13 @@ export default new Vuex.Store({
           max: 23
         },
         allChecked: true,
-        blackRate: 32,
+        blackRate: 50,
         contiguous: true
       }
     },
-    menuOpen: false
+    menuOpen: false,
+    logOpen: false,
+    keyboardOpen: false
   },
   mutations: {
     setRule(state, payload) {
@@ -53,6 +58,12 @@ export default new Vuex.Store({
     },
     toggleMenu(state, force) {
       state.menuOpen = force || !state.menuOpen;
+    },
+    toggleKeyboard(state, force) {
+      state.keyboardOpen = force || !state.keyboardOpen;
+    },
+    toggleLog(state, force) {
+      state.logOpen = force || !state.logOpen;
     },
     changeThemeColor(state, newColor) {
       state.uiOptions.themeColor = newColor;

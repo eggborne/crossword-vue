@@ -2,7 +2,7 @@
 	<header id='page-header'>
 		<h1>Crosswords<span style='opacity: 0.75' >.cc</span></h1>
 		<div class="button-area">
-			<Button :label="`TRAIN`" :handleClick="handleClickTrain" />
+			<!-- <Button :label="`TRAIN`" :handleClick="handleClickTrain" /> -->
 			<Button id='save-button' :label="`SAVE`" :handleClick="handleClickToSave" />
 			<!-- <Button :label="`<`" :handleClick="handleClickPrevious" /> -->
 			<Button :label="`BROWSE`" :handleClick="handleClickToBrowse" />
@@ -47,7 +47,7 @@ header {
 		2px 1px 0 #00000088;
 }
 h1 {
-	font-family: 'Catamaran';
+	font-family: 'Catamaran', sans-serif;
 	color: var(--text-color);
 }
 .button-area {

@@ -84,6 +84,7 @@ export default {
   align-content: stretch;
   grid-column-gap: var(--main-padding);
   grid-row-gap: calc(var(--main-padding) / 2);
+  z-index: 3;
 }
 .toggle, .option-row {
   grid-column-end: span 2;

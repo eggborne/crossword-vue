@@ -1,7 +1,7 @@
 <template>
   <div class="clues-modal">
     Clues for {{ wordObj.word }} <input
-    id='word-input'
+    class='word-input'
     type='text'
     placeholder=''
     v-model='clueValue'
@@ -64,6 +64,7 @@ export default {
 		-1px -1px calc(var(--main-padding) / 2) #00000066;
   z-index: 1;
   text-align: center;
+  
 }
 .status-area {
   height: var(--header-height);
@@ -108,7 +109,7 @@ input {
   box-shadow: 1px 1px 2px #00000066,
 		-1px -1px 2px #00000066;
 }
-#word-input {
-  text-transform: uppercase;
+.word-input {
+  /* text-transform: capitalize; */
 }
 </style>

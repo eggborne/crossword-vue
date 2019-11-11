@@ -64,7 +64,8 @@ export default {
   --text-color: #eee;
   --secondary-text-color: #222;
   --danger-color: #7c3a3a;
-  --main-font: 'Roboto';
+  --success-color: #1e942a;
+  --main-font: 'Roboto', sans-serif;
   --cell-width: calc(var(--board-size) / var(--cells-wide));
   --cell-height: calc(var(--board-size) / var(--cells-wide));
   --cell-letter-size: calc(var(--cell-width) / 1.5);
@@ -73,6 +74,8 @@ export default {
   --control-panel-min-height: calc((var(--control-row-height) * 3.75) + (var(--main-padding) * 3));
   --theme-word-color: rgba(0, 0, 255, 0.25);
   --theme-word-color-2: rgb(58, 173, 240);
+  --highlight-outline-color: rgb(97, 125, 240);
+  --lower-area-height: calc(var(--view-height) - var(--header-height) - 100vmin);
 }
 html {
   font-size: calc(1rem);
@@ -91,6 +94,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
+}
+.small-text {
+  font-size: calc(var(--header-height) / 3.5) !important;
 }
 .dark-theme {
   --body-bg-color: #111;
@@ -179,8 +185,23 @@ input::-moz-range-thumb {
 	font-weight: bold;
 	color: #2c3e50;
 }
-
 #nav a.router-link-exact-active {
 	color: #42b983;
+}
+@keyframes cell-pulse {
+  0% {
+    background: rgba(0, 0, 128, 0.27);
+  }
+  100% {
+    background: rgba(0, 0, 128, 0.47);
+  }
+}
+@keyframes cell-pulse-orange {
+  0% {
+    background: transparent;
+  }
+  100% {
+    background: rgba(174, 182, 9, 0.479);
+  }
 }
 </style>

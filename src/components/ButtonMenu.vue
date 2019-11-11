@@ -1,6 +1,6 @@
 <template>
 <div class='button-menu'>
-  <Button :class='[option.name === `symmetry` && `small-text`]' :label='`${label} ${displayValue}`' :handleClick='toggleOpen' :highlighted='isOpen' />
+  <Button :label='`${label} ${displayValue}`' :handleClick='toggleOpen' :highlighted='isOpen' />
   <div class='button-menu-options' :class='[isOpen && `open`, option.name && `two-column`]'>
 	  <Button 
       v-for='(selection, i) in selections'
@@ -67,9 +67,9 @@ export default {
   min-width: 100%;
   padding: 0 var(--main-padding);
 }
-.button-menu button.small-text {
+/* .button-menu button.small-text {
   font-size: calc(var(--header-height) / 4);
-}
+} */
 .button-menu button.selected {
   background: var(--button-selected-color);
 }
