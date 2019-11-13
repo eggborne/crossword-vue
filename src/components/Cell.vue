@@ -9,7 +9,8 @@
       themeEnd,
       viable && `viable`, 
       violating && `violating`, 
-      shaded && `shaded`      
+      shaded && `shaded`,      
+      cheater && `cheater`      
     ]'
     v-on:pointerdown='handleClick'
   >
@@ -26,6 +27,7 @@ export default {
   components: {},
   props: {
     shaded: Boolean,
+    cheater: Boolean,
     selected: Boolean,
     highlighted: Boolean,
     viable: Boolean,
@@ -85,6 +87,9 @@ export default {
 } */
 .cell.shaded {
   background-color: var(--blank-color);
+}
+.cell.cheater {
+  background-color: #330000;
 }
 .cell.theme-word {
   z-index: 2;

@@ -14,6 +14,7 @@
 				highlightedLetters.down.includes(cellData.index)
 			'
 			:viable='viableLetters.includes(cellData.index)'
+			:cheater='cheaterCells.includes(cellData.index)'
 			:themeWordAcross='themeWordAcross(cellData)'
 			:themeWordDown='themeWordDown(cellData)'
 			:themeEnd='themeEnd(cellData)'
@@ -53,6 +54,7 @@ export default {
 		cellGrid: Array,
 		selectedCell: Object,
 		violatingCells: Array,
+		cheaterCells: Array,
 		viableWords: Array,
 		highlightedWords: Object,
 		handleCellClick: Function,

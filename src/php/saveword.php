@@ -12,5 +12,5 @@ if($sql){
 }else{
     echo 'WORD SAVE FAILED';
 }
-mysqli_close($dblink);
+mysqli_close($link);
 ?>

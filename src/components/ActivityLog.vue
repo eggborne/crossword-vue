@@ -43,7 +43,6 @@ export default {
   max-height: 100vmin;
   background: #333333;
   padding: var(--main-padding);
-  z-index: 2;
   transition: transform 400ms ease;
   border-bottom-left-radius: calc(var(--main-padding) / 4);
   /* text-shadow: -2px -1px 0 #00000088, 2px -1px 0 #00000088, -2px 1px 0 #00000088,
@@ -53,6 +52,7 @@ export default {
   align-items: center;
   align-content: stretch;
   grid-row-gap: calc(var(--main-padding) / 2);  
+  z-index: 3;
   overflow-y: auto;
   /* scroll-behavior: smooth; */
 }

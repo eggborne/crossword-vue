@@ -38,13 +38,15 @@ export default new Vuex.Store({
           max: 23
         },
         allChecked: true,
-        blackRate: 50,
+        blackRate: 30,
         contiguous: true
       }
     },
     menuOpen: false,
     logOpen: false,
-    keyboardOpen: false
+    keyboardOpen: false,
+    toastVisible: false,
+    toastMessage: ''
   },
   mutations: {
     setRule(state, payload) {
@@ -97,6 +99,12 @@ export default new Vuex.Store({
     },
     setLoadedState(state, payload) {
       state[payload.loadEvent] = payload.loadedStatus;
+    },
+    setToastMessage(state, message) {
+      state.toastMessage = message;
+    },
+    setToastVisible(state, newVisibleState) {
+      state.toastVisible = newVisibleState;
     }
   },
   actions: {

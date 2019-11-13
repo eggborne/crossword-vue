@@ -4,6 +4,8 @@ $postData = json_decode(file_get_contents("php://input"), TRUE);
 $word = $postData['word'];
 $tbl_name = $postData['length'];
 $clues = $postData['clues'];
+$author = $postData['author'];
+$date = $postData['date'];
 
 
 $sql = mysqli_query($link, "UPDATE `$db_name`.`$tbl_name` SET clues='$clues' WHERE word='$word';");
@@ -13,5 +15,5 @@ if($sql){
 }else{
     echo 'CLUE SAVE FAILED';
 }
-mysqli_close($dblink);
+mysqli_close($link);
 ?>

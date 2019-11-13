@@ -11,6 +11,9 @@
     <div class='status-area'>
       <slot></slot>
     </div>
+    <div>
+      miniboard here
+    </div>
     <div class='save-button-area'>
       <Button
         id='cancel-button'
@@ -34,6 +37,9 @@
     <div class='status-area'>
       <slot></slot>
     </div>
+    <div>
+      miniboard here
+    </div>
     <div class='save-button-area'>
       <Button
         id='cancel-button'
@@ -45,16 +51,52 @@
       />
     </div>
 	</div>
+
   <div v-else-if='type === `word`' class="save-modal">    
-    <header>New word:</header>
+    <header>Enter word:</header>
     <input
-    class='word-input'
-    type='text'
-    placeholder=''
-    v-model='inputValue'
+      :class='[`word-input`, userWordInDB && `word-exists`]'
+      type='text'
+      placeholder=''
+      v-model='inputValue'
+      @input='handleTypedNewWord'
     />
-    <div class='status-area'>
-      <slot></slot>
+    <div :class='[`status-area`, userWordInDB && `showing`]'>
+      {{ statusMessage }}
+    </div>
+    <div :class='[`clue-list`, `user-word-info`]'>
+      <CluePanel 
+        :class='[true && `showing`, (userWordInDB && userWord.selectedClue === i) && `selected`]' 
+        v-for='(clue, i) in userWordClues' 
+        :key='clue'
+        :doomed='doomedClue === clue'
+        :selectClue='() => handleSelectClue(i)'
+      >
+        {{ clue }}
+        <Button 
+          :clickType='`click`'
+          :handleClick='() => handleClickDeleteClue(userWord, i)' 
+          :label='saving === `deletingClue` ? `Deleting...` : `DELETE`'
+          class='delete-clue-button'
+        />
+      </CluePanel>
+      <CluePanel 
+        :class='[`clue editable`, clueEdited && `edited`, userWord && `showing`]'
+        :editable='true'
+        :selectClue='() => null'
+      >
+        <div contenteditable @input='handleClueInputChange' id='clue-edit-space'>
+        </div>
+          <div v-if='inputValue && userWord' :class='[`clue-edit-placeholder`]' >Enter clue for "{{ inputValue.toUpperCase() }}"</div>
+          <div v-else :class='[`clue-edit-placeholder`]' >Enter clue here</div>
+        <Button 
+          :clickType='`click`'
+          contenteditable='false'
+          :class='[`save-clue-button`, (inputValue.length >= 3 && inputValue.length <= 20) ? `` : `disabled`]'
+          :label='`Add`' :handleClick="handleClickSaveClue"
+        />
+      </CluePanel>
+
     </div>
     <div class='save-button-area'>
       <Button
@@ -62,8 +104,10 @@
         :label="`Cancel`" :handleClick="handleClickCancelSave"
       />
       <Button
-        class='save-button'
-        :label="`Save`" :handleClick="() => handleSaveWord(inputValue)"
+        :clickType='`click`'
+        :class='[`save-button`, (inputValue.length < 3 || inputValue.length > 20) && `disabled`]'
+        :label="userWordInDB ? `Done` : `Save Word`" 
+        :handleClick="userWordInDB ? handleClickCancelSave : () => handleSaveWord(inputValue)"
       />
     </div>
     <div class='pattern-label' v-if='problemPatterns.length'>
@@ -79,18 +123,22 @@
       </div>
     </div>
   </div>
+
   <div v-else-if='type === `clues`' class="clues save-modal">
-    <header>Clues for "{{ wordObj.word.toUpperCase() }}"</header>
+    <header>
+    {{ wordObj.word.toUpperCase() }}
+    </header>
     <div class='clue-list'>
       <div class='clue' v-for='(clue, i) in wordObj.clues' :key='i'>
         {{ clue }}
-        <Button :handleClick='handleDeleteClue' :label='`DELETE`' class='delete-clue-button'></Button>
+        <Button :handleClick='() => handleDeleteClue(userWord, i)' :label='`DELETE`' class='delete-clue-button'></Button>
       </div>
+      <span :style='{height: `var(--header-height)`, fontWeight: `normal`, textAlign: `center`}' v-if='!wordObj.clues.length'>no clues in database</span>
       <div :class='[`clue editable`, clueEdited && `edited`]'>
         <div contenteditable @input='handleClueInputChange' id='clue-edit-space'></div>
         <Button contenteditable='false'
           class='save-clue-button'
-          :label='`Save`' :handleClick="() => handleSaveClue(wordObj, inputValue)"
+          :label='`Save`' :handleClick="() => handleSaveClue(userWord, inputValue)"
         />
       </div>     
     </div>
@@ -111,12 +159,18 @@
 <script>
 import Button from './Button';
 import Spinner from './Spinner';
+import CluePanel from './CluePanel';
 
 export default {
   name: 'SaveModal',
   data: () => ({
     inputValue: '',
-    clueEdited: false
+    clueEdited: false,
+    statusMessage: '',
+    userWordInDB: false,
+    userWord: undefined,
+    doomedClue: undefined,
+    saving: undefined
   }),
   props: {
     type: String,
@@ -124,24 +178,132 @@ export default {
     handleSaveWord: Function,
     handleSaveClue: Function,
     handleDeleteClue: Function,
+    fullWordList: Array,
+    getWordList: Function,
     handleClickCancelSave: Function,
+    lookUpWord: Function,
     busy: Boolean,
     wordObj: Object,
-    problemPatterns: Array
+    problemPatterns: Array,
+    wordsNeeded: Object
   },
   components: {
     Button,
-    Spinner
+    Spinner,
+    CluePanel
+  },
+  computed: {
+    userWordClues() {
+      return this.userWord ? this.userWord.clues : [];
+    }
   },
   methods: {
+    async wait(ms) {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          resolve()
+        }, ms || 300)
+      })
+    },
     handleNameChange(e, newValue) {
-      this.inputValue = newValue;
+      this.inputValue = newValue.replace(/[^a-z]/, '');  
+    },
+    handleSelectClue(newIndex) {
+      console.log('selcgin', newIndex)
+      this.userWord.selectedClue = newIndex;
+    },
+    async handleTypedNewWord(e) {
+      console.log('e?', e)
+      let newValue;
+      if (!e) {
+        newValue = this.userWord.word;
+      } else {
+         newValue = e.target.value;
+      }
+      if (newValue.length < 3 || newValue.length > 20) {
+        console.log('out of ragne')
+        if (this.userWord) {
+          this.userWord = undefined;
+          this.userWordInDB = false;
+          // this.statusMessage = ``;
+        }
+        return;
+      }
+      let wordData;
+      if (!this.fullWordList[newValue.length]) {
+        console.error('CALLING DB FOR WORDS OF LENGTH', newValue.length);
+        await this.getWordList(newValue.length);
+      }
+      wordData = await this.lookUpWord(newValue);
+      if (wordData && wordData.data) {
+        console.log('got raw', wordData.data)
+        if (wordData.data.clues[0] === '[') {
+          wordData.data.clues = JSON.parse(wordData.data.clues);
+          wordData.data.clues.forEach((clue, i) => {
+            if (clue) {
+                console.log('checking', clue)
+                wordData.data.clues[i] = clue.replace(/\|q\|/g, "'").replace(/\|qq\|/g, "\"");                 
+              } else {
+                console.error('SM EMPTY CLUE for', newValue)
+              }
+                            
+          });
+        } else {
+          console.warn('wordData.data.clues was not an array, so wordData is now', wordData.data)
+          if (wordData.data.clue) {
+            wordData.data.clues = [wordData.data.clue]
+          } else {
+            wordData.data.clues = []
+          }
+        }
+
+        let newWordObject = {
+          id: parseInt(wordData.data.id),
+          word: wordData.data.word,
+          clues: wordData.data.clues,
+          updated: wordData.data.updated,
+          selectedClue: wordData.data.selectedClue
+        }
+        this.userWord = newWordObject;
+        console.warn('made word object', newWordObject)
+        this.userWordInDB = true;
+        this.statusMessage = `IN DATABASE`
+      } else {
+        // word not in DB already
+        this.userWord = newValue;
+        if (this.userWordInDB) {
+          this.userWordInDB = false;
+          this.statusMessage = ``;
+        }
+      }     
     },
     handleClueInputChange(e) {
       const clueString = e.target.innerText;
       console.log('GOT', typeof clueString);
       this.clueEdited = clueString !== '';
       console.log('set edited to', (clueString.length))
+    },
+    async handleClickSaveClue() {
+      this.saving = 'clue';
+      const clue = document.getElementById('clue-edit-space').innerText;
+      document.getElementById('clue-edit-space').innerText = '';
+      // document.getElementById('clue-edit-space').innerText = 'Saving clue...';
+      const fixedClue = clue[0].toUpperCase() + clue.substr(1);
+      await this.handleSaveClue(this.userWord, fixedClue);
+      this.saving = undefined;
+      // await this.lookUpWord(this.userWord.word);
+      // this.handleTypedNewWord();
+      this.clueEdited = false;
+    },
+    async handleClickDeleteClue(wordObj, clueIndex) {
+        this.doomedClue = wordObj.clues[clueIndex];
+        // await this.wait(300);
+        await this.handleDeleteClue(wordObj, clueIndex);
+        await this.lookUpWord(this.userWord.word);
+        this.handleTypedNewWord();
+        requestAnimationFrame(() => {
+          this.doomedClue = undefined;
+        });
     }
   }
 };
@@ -162,14 +324,15 @@ export default {
   justify-items: center;
   align-items: center;
 
+  transition: all 600ms ease;
+
   grid-template-rows:
     var(--header-height)
-    calc(var(--header-height) * 1.25)
-    calc(var(--header-height) / 2)
-    calc(var(--header-height) * 1.5)
+    var(--header-height)
+    1fr
     auto
   ;
-  grid-row-gap: var(--main-padding);
+  /* grid-row-gap: var(--main-padding); */
 	box-shadow: 1px 1px calc(var(--main-padding) / 2) #00000099,
 		-1px -1px calc(var(--main-padding) / 2) #00000099;
   z-index: 2;
@@ -178,100 +341,83 @@ export default {
   border-radius: calc(var(--main-padding) / 4);
 }
 .clues.save-modal {
+  grid-template-rows: unset;
   grid-template-rows:
     var(--header-height)
-    1fr
-    calc(var(--header-height) / 2)
     var(--header-height)
-    auto
+    1fr
+    calc(var(--header-height) * 1.5)
   ;
+  grid-row-gap: 0px !important;
 }
+.user-word-info {
+  display: flex;
+  align-items: center;
+  align-items: stretch;
+}
+.clue-list.user-word-info .clue {
+  display: flex;
+  justify-content: space-between;
+}
+.clue-list.user-word-info .clue-edit-space {
+  height: unset;
+}
+
 header {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   text-align: center;
 }
 .clue-list {
   width: 100%;
-  max-height: 80vmin;
+  height: min-content;
   display: flex;
   flex-direction: column;
-  padding: var(--main-padding) 0;  
+  padding: calc(var(--main-padding)) 0; 
+  margin-top: calc(var(--main-padding) * 3);
+  box-sizing: content-box;
+  overflow-x: visible;
   overflow-y: auto;
+
 }
-.clue-list > div {
-  font-weight: normal;
-  text-align: left;
-  border-radius: calc(var(--main-padding) / 4);
-  background: #00000066;
-  padding: var(--main-padding);  
-}
-.clue {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  margin: calc(var(--main-padding) / 2);  
-  min-height: 100%;
-  box-shadow: 0px 1px calc(var(--main-padding) / 4) #000000aa,
-		-1px -1px calc(var(--main-padding) / 4) #000000aa;
-}
-.clue.editable {
-  display: flex;
-  justify-content: space-between;
-  min-height: calc(var(--header-height) * 2);
-  outline-color: green;
-}
-#clue-edit-space {
-  flex-grow: 1;
-  outline: none;
-  word-wrap: break-word;
-  text-transform: capitalize;
-}
-.clue.editable::after {
-  content: 'Enter your new clue here';
+.clue-edit-placeholder {
   position: absolute;
   opacity: 0.5;
   display: flex;
   pointer-events: none; 
   transition: opacity 210ms ease;
-  z-index: 0;
+  /* z-index: -1; */
 }
-.clue.editable.edited::after, .clue.editable #clue-edit-space:focus::after {
-  opacity: 0;
+.clue-edit-placeholder.showing {
+  opacity: 0.5;
 }
-.clue > div.last-child {
-  margin-bottom: 0;
+
+.clue-list > div {
+  font-weight: normal;
+  text-align: left;
+  border-radius: calc(var(--main-padding) / 6);
+  background: #00000066;
+  padding: var(--main-padding);  
 }
-.clue > div:first-child {
-  grid-row-end: span 2;
-}
-.clue > button {
-  grid-column-start: 2;
-  padding: calc(var(--main-padding) / 2);
-}
-.delete-clue-button {
-  background: var(--danger-color);
-  grid-row-start: 2;
-}
-.save-clue-button {
-  background: var(--success-color);
-  z-index: 1;
-  grid-row-start: 2;
-  width: 14vmin;
-  height: min-content;
-  align-self: flex-end;
-  font-size: 3.5vmin;
-}
+
 .status-area {
+  position: absolute;
+  top: 0; 
+  left: 0;
   font-size: 1rem;
   font-weight: 700;
+  transform: translate(-50%, 0);
+  left: 50%;
+  color: var(--success-color);
+  top: calc(var(--main-padding) * 1.75 + var(--header-height) * 2);
+  opacity: 0;
+  transition: opacity 300ms ease;
 }
 .status-area.error {
   color: var(--danger-color);
 }
 .patterns-area {
   width: 100%;
-  max-height: 100vmin;
+  max-height: 50vmin;
   padding: var(--main-padding) 0;
   text-transform: uppercase;
   font-size: 0.8rem;
@@ -302,15 +448,18 @@ header {
   height: calc(var(--header-height) * 1.25);
   justify-content: space-evenly;
   align-items: flex-end;
+  padding: var(--main-padding);
+  box-sizing: content-box;
 }
 .save-button {
-  font-size: 1.5rem;
-  padding: 0 var(--header-height);
+  flex-grow: 1;
+  margin-left: calc(var(--main-padding) * 2);
+  font-size: 1.25rem;
   height: 100%;
 }
 #cancel-button {
   font-size: 1rem;
-  padding: 0 calc(var(--header-height) / 2);
+  padding: 0 var(--main-padding);
   height: 80%;
   background: rgb(123, 124, 95)
 }
@@ -324,8 +473,15 @@ input {
   height: 2.25rem;
   box-shadow: 1px 1px 2px #00000066,
 		-1px -1px 2px #00000066;
+  border-radius: calc(var(--main-padding) / 4);
 }
 .word-input {  
   text-transform: uppercase;
+}
+.word-input.word-exists {
+  background: rgb(190, 243, 181);
+}
+.showing {
+  opacity: 1;
 }
 </style>

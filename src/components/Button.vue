@@ -1,5 +1,8 @@
 <template>
-	<button @pointerdown='handleClick' :class='highlighted ? `highlighted` : ``'>
+	<button v-if='!clickType' @pointerdown='handleClick' :class='highlighted ? `highlighted` : ``'>
+		{{ label.toUpperCase() }}
+	</button>
+	<button v-else-if='clickType === `click`' @click='handleClick' :class='highlighted ? `highlighted` : ``'>
 		{{ label.toUpperCase() }}
 	</button>
 </template>

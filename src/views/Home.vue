@@ -18,6 +18,7 @@
         '
         :selectedCell='selectedCell'
         :violatingCells='violatingCells'
+        :cheaterCells='cheaterCells'
         :themeWords='themeWords'
       />
     </div>
@@ -93,6 +94,7 @@
       :iterations='iterations'
       :viableCellAmount='viableCellAmount'
     />
+    <SaveToast />
     <div v-if='showingModal' id='dark-mask'></div>
     <SaveModal
       v-if='showingModal === `save` || showingModal === `clues`'
@@ -100,9 +102,14 @@
       :handleSaveDiagram='handleSaveDiagram'
       :handleSaveWord='saveNewWord'
       :handleClickCancelSave='handleClickCancelModal'
+      :handleSaveClue='handleSaveClue'
       :handleDeleteClue='handleDeleteClue'
+      :fullWordList='fullWordList'
+      :getWordList='getWordList'
+      :lookUpWord='lookUpWord'
       :wordObj='$store.state.selectedWord'
       :problemPatterns='problemPatterns'
+      :wordsNeeded='wordsNeeded'
     >
     {{ saveMessage }}
     </SaveModal>
@@ -158,6 +165,7 @@ import BoardValidator from '../boardvalidator';
 import DiagramCreator from '../diagramcreator';
 import MicroBoard from '../components/MicroBoard.vue';
 import ActivityLog from '../components/ActivityLog.vue';
+import SaveToast from '../components/SaveToast.vue';
 
 import GridScanner from '../gridscanner';
 
@@ -263,6 +271,7 @@ export default {
     auditMode: false,
     rules: {},
     violatingCells: [],
+    cheaterCells: [],
     themeWords: {
       across: [],
       down: []
@@ -329,7 +338,8 @@ export default {
     SaveModal,
     ChoicesModal,
     MicroBoard,
-    ActivityLog
+    ActivityLog,
+    SaveToast
   },
   methods: {
     // getContiguous(grid) {
@@ -651,7 +661,12 @@ export default {
     },
     async handleDeleteClue(wordObj, clueIndex) {
       console.warn('received', wordObj.word, clueIndex, wordObj.clues[clueIndex]);
-
+      let deleteResult = await DB.removeClue(wordObj, clueIndex)
+      if (deleteResult.data === 'Your clue was saved.') {
+        this.showToast(`Clue for "${wordObj.word}" deleted.`)
+      }
+      await this.getWordList(wordObj.word.length);
+      return;
     },
     async handleSaveDiagram(creator) {
       if (!creator) {
@@ -667,11 +682,12 @@ export default {
         const saveResponse = await DB.saveDiagram(cellString, width, height, creator);
         if (saveResponse.data) {
           console.error('saveDiagram ---->', saveResponse);
-          this.saveMessage = `SAVED!`;
-          setTimeout(() => {
-            this.saveMessage = ``;
+          // this.saveMessage = `SAVED!`;
+          // setTimeout(() => {
+          //   this.saveMessage = ``;
             this.showingModal = undefined;
-          }, 500);
+            this.showToast(`Diagram saved.`);            
+          // }, 500);
         }
       } else {
         document.querySelector('.save-modal .status-area').classList.add('error');
@@ -1367,6 +1383,8 @@ export default {
       let wordList = this.fullWordList[length];
       if (!wordList) {
         wordList = await this.getWordList(length);
+        console.warn('GOT WORDLIST', length);
+        console.info(wordList)
       }
       // console.error('updating fill option total amoutn', length)
       
@@ -1417,8 +1435,11 @@ export default {
           if (wordObj.clues) {
             wordObj.clues = JSON.parse(wordObj.clues);
             wordObj.clues.forEach(clue => {
-              clue = clue.replace(/`/g, "'");                
-              // clue = clue.replace(/|/g, "\"");                
+              if (clue) {
+                clue = clue.replace(/\|q\|/g, "'").replace(/\|qq\|/g, "\"");                  
+              } else {
+                console.error('EMPTY CLUE for', wordObj.word)
+              }
             });
           }
         })
@@ -1937,12 +1958,6 @@ export default {
               // console.error('stopped at canceled', canceled);
               // console.error('stopped at failed', failed);
               resolve();
-              // setTimeout(() =>{
-              //   requestAnimationFrame(() => {
-              //     this.cellGrid.forEach(row => row.map(cell => cell.letter = ''))
-              //     viableCells.forEach(cell => this.cellGrid[cell.row][cell.column].letter = 'V') 
-              //   })
-              // }, 500)
             // });
           }
           // return grid;
@@ -1985,6 +2000,7 @@ export default {
       let newQueueItem = [];
       let violating = [];
       let newViableCells = viableCells.filter(cell => !cell.shaded).sort(() => Math.random() - 0.5);
+      let wordCount = 0;
       for (let i = newViableCells.length - 1; i >= 0; i -= 1) {
         let stillValidIfShaded = false;
         let selectedCell = newViableCells[i];
@@ -2011,28 +2027,53 @@ export default {
 
           newGrid = this.addCellLabels(newGrid);
           let needed = this.getWordsNeeded(newGrid);
-          let enforceMax = true;
-          violating = this.getViolatingCells(needed, true, enforceMax);
-          newGrid.forEach(row => row.map(cell => cell.number = ''))
-     
-          if (!violating.length) {
-            let offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
-            if (offensiveQuotient < 50) {
-              let contiguous = boardValidator.checkIfContiguous(newGrid, newGrid.flat());
-              if (this.rules.contiguous && contiguous || !this.rules.contiguous) {
-                foundGoodCell = true;         
-                break;          
+          let newWordCount = (needed.across.length + needed.down.length);
+          let cheater = false;
+          console.log(newWordCount, 'new vs old', wordCount)
+          if (newWordCount === wordCount) {
+            console.error('CELLDID NOT CHANGE WORD COUNT!', selectedCell);
+            cheater = true;
+            // this.cellGrid[selectedCell.row][selectedCell.column].cheater = true;
+            // unshade the test cells
+            // newGrid[selectedCell.row][selectedCell.column].shaded = previousShaded;
+            // newViableCells.splice(i, 1);
+            // if (!centerCell) {
+            //     mirrorCoords.forEach((coordSet) => {
+            //       const mirrorCell = newGrid[coordSet.row][coordSet.column];
+            //       mirrorCell.shaded = previousShaded;
+                  
+            //     });
+            // }
+            // newQueueItem.length = 0;
+            // continue;
+          } else {
+            }
+            wordCount = newWordCount;
+            let enforceMax = true;
+            violating = this.getViolatingCells(needed, true, enforceMax);
+            newGrid.forEach(row => row.map(cell => cell.number = ''))
+        
+            if (!violating.length) {
+              let offensiveQuotient = gridScanner.getGridAttribute(newGrid, 'offensive');
+              if (offensiveQuotient < 25) {
+                let contiguous = boardValidator.checkIfContiguous(newGrid, newGrid.flat());
+                if (this.rules.contiguous && contiguous || !this.rules.contiguous) {
+                  foundGoodCell = true;
+                  if (cheater) {
+                    // this.cheaterCells.push(selectedCell.index)
+                  }
+                  break;          
+                } else {
+                  console.error(selectedCell.index, i, 'rejected for non-contiguous');
+                }
               } else {
-                console.error(selectedCell.index, i, 'rejected for non-contiguous');
+                console.error(selectedCell.index, i, 'rejected for offensive');
               }
             } else {
-              console.error(selectedCell.index, i, 'rejected for offensive');
+              
             }
-          } else {
-            
-          }
           if (foundGoodCell) {
-            
+            console.log('now need', needed.across.length + needed.down.length)
           } else {            
                     
             // unshade the test cells
@@ -2051,13 +2092,14 @@ export default {
       }
       // console.log('returning newViableCells:', newViableCells);
 
-       requestAnimationFrame(() => {
-        // this.cellGrid.forEach(row => row.map(cell => cell.letter = ''))
-        // viableCells.forEach(cell => this.cellGrid[cell.row][cell.column].letter = 'V') 
-      })
+      //  requestAnimationFrame(() => {
+      //   // this.cellGrid.forEach(row => row.map(cell => cell.letter = ''))
+      //   // viableCells.forEach(cell => this.cellGrid[cell.row][cell.column].letter = 'V') 
+      // })
       
       if (foundGoodCell) {
         this.buildQueue = [...this.buildQueue, newQueueItem];
+        
         return {grid: newGrid, viableCells: newViableCells};
       } else {
         // if (this.symmetry > 0) {
@@ -2252,12 +2294,25 @@ export default {
       //   });        
       // })
     },
-    async saveNewWord(newWord) {      
-      const saveResp = await DB.saveWord(newWord)
-      console.warn(newWord, saveResp);
-      const updateResp = await this.getWordList(newWord.length);
-      console.warn('updated!', updateResp)
-      this.showingModal = undefined;
+    showToast(message, duration) {
+      if (!duration) { duration = 1500 }
+      this.$store.commit('setToastMessage', message);   
+      this.$store.commit('setToastVisible', true);
+      setTimeout(() => {
+        this.$store.commit('setToastVisible', false);
+      }, duration);
+    },
+    async saveNewWord(newWord, keepModal) {      
+      const saveResp = await DB.saveWord(newWord);
+      console.log('saveRep', saveResp)
+      const updatedList = await this.getWordList(newWord.length);
+      console.log('updateResp', updatedList)
+      if (saveResp.data === 'Your word was saved.' && updatedList.length) {
+        if (!keepModal) { 
+          this.showToast(`Word "${newWord.toUpperCase()}" saved.`)  
+          this.showingModal = undefined 
+        }
+      }
     },
     clearBoard(e, shade) {
       if (this.$store.state.logOpen) {
@@ -3227,8 +3282,47 @@ export default {
         this.$store.commit('toggleKeyboard');
       }
     },
+    async lookUpWord(word) {
+      console.log('received', word);
+      if (word.length >= 3) {
+        let result = await DB.getSingleWord(word);
+        if (result.data.word) {
+          console.log('got', result.data)
+          result.data.selectedClue = 0;
+        }
+        return result;
+      }
+    },
+    async handleSaveClue(wordObj, newClue) {
+      let word;
+      let clues = [];
+      let toastMessage;
+      if (wordObj.clues.includes(newClue)) {
+        this.showToast('CLUE ALREADY EXISTS!');
+        return;
+      }
+      if (typeof wordObj === 'object') {
+        console.warn('handleSaveClue received existing word', wordObj, newClue)
+        word = wordObj.word
+        clues = wordObj.clues
+        toastMessage = `Clue for "${word.toUpperCase()}" saved.`;
+      } else {
+        console.error('handleSaveClue received word NOT YET IN DB...', wordObj);
+        word = wordObj;
+        await this.saveNewWord(wordObj, true);
+        toastMessage = `Word "${word.toUpperCase()}" added and clue saved."`      
+      }
+      clues.push(newClue);
+      console.warn('sending clues', clues, 'for word', word);
+      let saveResp = await DB.saveClue(word, clues, true);
+      await this.getWordList(word.length);
+      if (saveResp.data === 'Your clue was saved.') {
+        this.showToast(toastMessage)  
+      }
+      return;
+    }
 
-    async scanBoardForImage() {
+    // async scanBoardForImage() {
       // let boardDiv = document.getElementById('puzzle-board');
       // let image = document.getElementById('board-image');
       // let dataUrl = await htmlToImage.toPng(boardDiv);
@@ -3247,7 +3341,7 @@ export default {
       //   }, 2000)
       // });
     }
-  },
+  // },
   // getIntersectingWords(startingCell) {
   //   for (let i=startingCell.column + 1; i < this.boardSize.width; i++) {
   //     this.violatingCells.push(this.gridCells[startingCell.row][i])
