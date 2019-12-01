@@ -4,17 +4,22 @@
       class='mode-pane'
       :class='$store.state.editMode === `diagram` ? `selected` : ``'
       @pointerdown='changeEditMode'
-    >EDIT DIAGRAM</div></div>
+    >DIAGRAM</div></div>
     <div><div id='puzzle-pane'
       class='mode-pane'
       :class='$store.state.editMode === `puzzle` ? `selected` : ``'
       @pointerdown='changeEditMode'
-    >EDIT PUZZLE</div></div>
+    >PUZZLE</div></div>
     <div><div id='clues-pane'
       class='mode-pane'
       :class='$store.state.editMode === `clues` ? `selected` : ``'
       @pointerdown='changeEditMode'
-    >EDIT CLUES</div></div>
+    >CLUES</div></div>
+    <div><div id='dictionary-pane'
+      class='mode-pane dictionary'
+      :class='$store.state.editMode === `dictionary` ? `selected` : ``'
+      @pointerdown='changeEditMode'
+    >DICTIONARY</div></div>
   </div>
 </template>
 
@@ -32,18 +37,20 @@ export default {
   width: 100%;
   height: var(--header-height);
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
 }
 .mode-bar > div {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.mode-bar > div:first-child {
+  border-left: calc(var(--main-padding) / 8) solid #eeeeeeaa;
   border-right: calc(var(--main-padding) / 8) solid #eeeeeeaa;
 }
+.mode-bar > div:first-child {
+  border-left: 0;
+}
 .mode-bar > div:last-child {
-  border-left: calc(var(--main-padding) / 8) solid #eeeeeeaa;
+  border-right: 0;
 }
 .mode-pane {
   height: 100%;
@@ -55,10 +62,17 @@ export default {
   font-weight: 700;
   text-shadow: -2px -1px 0 #00000066, 2px -1px 0 #00000066, -2px 1px 0 #00000066,
     2px 1px 0 #00000066;
-  opacity: 0.75;
+  opacity: 0.65;
+}
+.dictionary {
+  padding: 0 var(--main-padding);
 }
 .mode-pane.selected {
   opacity: 1;
+  color: rgb(202, 255, 202);
+}
+.mode-pane:not(.selected) {
   background: var(--pane-highlight-color);
+  border-top: 1px solid #00000033;
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div :class='[`home`, $store.state.loaded && `ready`, $store.state.editMode === `clues` && `clues-mode`]'>
+  <div :class='[`home`, $store.state.loaded && `ready`, $store.state.editMode]'>
     <Header
       :handleClickToBrowse='handleClickToBrowse'
       :handleClickToSave='$store.state.editMode === `diagram` ? handleClickToSaveDiagram : handleClickToSavePuzzle'
@@ -7,14 +7,15 @@
       :handleClickNext='handleClickNext'
       :handleClickTrain='handleClickTrain'
     />
-    <div v-cloak v-if='$store.state.editMode !== `clues`' class='board-area'>
+    <div v-if='($store.state.editMode === `diagram` || $store.state.editMode === `puzzle`)' class='board-area'>
       <Board
         :cellGrid='cellGrid'
         :highlightedWords='highlightedWords'
         :viableWords='viableWords'
         :handleCellClick='
         $store.state.editMode === `diagram` ? handleCellFlip :
-        $store.state.editMode === `puzzle` ? handleCellSelect : null
+        $store.state.editMode === `puzzle` ? handleCellSelect : 
+        () => null
         '
         :selectedCell='selectedCell'
         :violatingCells='violatingCells'
@@ -22,38 +23,43 @@
         :themeWords='themeWords'
       />
     </div>
-    <div v-else class='board-area'>
+    <!-- <transition name='section-fade' mode='out-in'> -->
+    <div key='clues' v-if='$store.state.editMode === `clues`' :class='[`board-area`, $store.state.editMode === `clues` && `showing`]'>
       <div class='clue-display'>
         <!-- <header>Words and clues</header> -->
         <div class='list-area'>
           <h1 class='direction-label'>Across</h1>
           <div class='clue-list across'>
-            <div class='word-clue-entry' v-for='wordObj in this.wordsNeeded.across.filter(wordObj => wordObj.word || !wordObj.word.includes(`*`)).sort((a, b) => a.number - b.number )' :key='wordObj.id'>
+            <div class='word-clue-entry' v-for='wordObj in this.wordsNeeded.across.filter(wordObj => wordObj.word && !wordObj.word.includes(`*`)).sort((a, b) => a.number - b.number )' :key='wordObj.id'>
               <div>{{ wordObj.number }}.</div>
               <div>{{ wordObj.word.toUpperCase() }}</div>
               <div>{{ wordObj.clues[wordObj.selectedClue] }}</div>
-              <button @pointerdown='() => handleClickToSaveClue(wordObj)' class='expand-button'>
-                {{ wordObj.clues.length ? `CHANGE` : `ADD` }} CLUE
-                <!-- <div class='down-caret'></div> -->
-              </button>
+              <Button :clickType='`click`' class='expand-button' :handleClick='() => handleClickToSaveClue(wordObj)' :label='`ADD CLUE`' />
             </div>
           </div>
           <h1 class='direction-label'>Down</h1>
           <div class='clue-list down'>
-            <div class='word-clue-entry' v-for='wordObj in this.wordsNeeded.down.filter(wordObj => wordObj.word || !wordObj.word.includes(`*`)).sort((a, b) => a.number - b.number )' :key='wordObj.id'>
+            <div class='word-clue-entry' v-for='wordObj in this.wordsNeeded.down.filter(wordObj => wordObj.word && !wordObj.word.includes(`*`)).sort((a, b) => a.number - b.number )' :key='wordObj.id'>
               <div>{{ wordObj.number }}.</div>
               <div>{{ wordObj.word.toUpperCase() }}</div>
               <div>{{ wordObj.clues[wordObj.selectedClue] }}</div>
-              <button @pointerdown='() => handleClickToSaveClue(wordObj)' class='expand-button'>
-                {{ wordObj.clues.length ? `CHANGE` : `ADD` }} CLUE
-                <!-- <div class='down-caret'></div> -->
-              </button>
+              <Button :clickType='`click`' class='expand-button' :handleClick='() => handleClickToSaveClue(wordObj)' :label='`ADD CLUE`' />
             </div>
           </div>
         </div>        
       </div>
     </div>
+    <div key='dictionary' v-show='$store.state.editMode === `dictionary`' :class='[`board-area`, $store.state.editMode === `dictionary` && `showing`]'>
+        <DictionaryScreen
+          :totalWords='fullWordList.flat().length'
+          :fullWordList='fullWordList'
+          :getFullWordList='getFullWordList'
+          :scrabbleScores='scrabbleScores'
+        />
+    </div>
+    <!-- </transition> -->
     <ControlPanel
+      id='control-panel'
       :editMode='editMode'
       :selectedCell='selectedCell'
       :options='options'
@@ -166,6 +172,8 @@ import DiagramCreator from '../diagramcreator';
 import MicroBoard from '../components/MicroBoard.vue';
 import ActivityLog from '../components/ActivityLog.vue';
 import SaveToast from '../components/SaveToast.vue';
+import Button from '../components/Button.vue';
+import DictionaryScreen from '../components/DictionaryScreen.vue';
 
 import GridScanner from '../gridscanner';
 
@@ -181,44 +189,14 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
-const scrabbleScores = {
-    a:1,
-    b:3,
-    c:3,
-    d:2,
-    e:1,
-    f:4,
-    g:2,
-    h:4,
-    i:1,
-    j:8,
-    k:5,
-    l:1,
-    m:3,
-    n:1,
-    o:1,
-    p:3,
-    q:10,
-    r:1,
-    s:1,
-    t:1,
-    u:1,
-    v:4,
-    w:4,
-    x:8,
-    y:4,
-    z:10
-};
 export default {
   name: 'Home',
   data: () => ({
-    editMode: 'diagram',
+    scrabbleScores: { A:1, B:3, C:3, D:2, E:1, F:4, G:2, H:4, I:1, J:8, K:5, L:1, M:3, N:1, O:1, P:3, Q:10, R:1, S:1, T:1, U:1, V:4, W:4, X:8, Y:4, Z:10 }, editMode: 'diagram',
     selectedCellIndex: undefined,
     selectedCell: undefined,
     showingModal: undefined,
-    fullWordList: [
-      
-    ],
+    fullWordList: [],
     viableCellAmount: 0,
     diagrams: undefined,
     boardSize: { width: 15, height: 15 },
@@ -250,6 +228,33 @@ export default {
       symmetry: {
         name: 'symmetry',
         title: 'Symmetry',
+        minValue: 0,
+        maxValue: 2,
+        step: 1,
+        cssVar: '',
+        cssUnit: ''
+      },
+      dictionarySort: {
+        name: 'dictionarySort',
+        title: 'Sort:',
+        minValue: 0,
+        maxValue: 2,
+        step: 1,
+        cssVar: '',
+        cssUnit: ''
+      },
+      dictionaryFilter: {
+        name: 'dictionaryFilter',
+        title: 'Filter by:',
+        minValue: 0,
+        maxValue: 1,
+        step: 1,
+        cssVar: '',
+        cssUnit: ''
+      },
+      dictionaryView: {
+        name: 'dictionaryView',
+        title: 'Show:',
         minValue: 0,
         maxValue: 2,
         step: 1,
@@ -299,6 +304,23 @@ export default {
     ],
     iterations: 0
   }),
+  created() {
+    if (window.innerWidth > window.innerHeight) {
+      window.addEventListener('keydown', (e) => {
+        if (this.$store.state.editMode === 'puzzle' && this.selectedCell) {
+          let selectedIndex = this.cellGrid.flat().indexOf(this.selectedCell);
+          // if (!this.$store.state.enteringLetters) {
+          //   this.$store.commit('changeEnteringLetters', true);
+          // }
+          if (e.key == 'Backspace') {
+            
+          } else {
+            this.changeLetter(e, selectedIndex, e.key);
+          }
+        }
+      })
+    }
+  },
   computed: {
     percentBlack() {
       return (this.cellGrid.length) ? this.getPercentBlack(this.cellGrid) : 0;
@@ -339,7 +361,9 @@ export default {
     ChoicesModal,
     MicroBoard,
     ActivityLog,
-    SaveToast
+    SaveToast,
+    Button,
+    DictionaryScreen
   },
   methods: {
     // getContiguous(grid) {
@@ -663,10 +687,10 @@ export default {
       console.warn('received', wordObj.word, clueIndex, wordObj.clues[clueIndex]);
       let deleteResult = await DB.removeClue(wordObj, clueIndex)
       if (deleteResult.data === 'Your clue was saved.') {
+        await this.getWordList(wordObj.word.length);
         this.showToast(`Clue for "${wordObj.word}" deleted.`)
+        return;
       }
-      await this.getWordList(wordObj.word.length);
-      return;
     },
     async handleSaveDiagram(creator) {
       if (!creator) {
@@ -904,7 +928,7 @@ export default {
       console.log('changeLetter args', e, index, newLetter);
       let allCells = this.cellGrid.flat();
       let targetCell = allCells[index];
-      this.cellGrid[targetCell.row][targetCell.column].letter = newLetter;
+      this.cellGrid[targetCell.row][targetCell.column].letter = newLetter.toUpperCase();
       console.log('targ', e.target.value)
       e.target.value = '';
       
@@ -960,8 +984,7 @@ export default {
     getWordSpace(number, direction) {
       return this.wordsNeeded[direction].filter(wordObj => wordObj.number === number)[0];
     },
-    fillWithWord(word, number, direction) {
-      // console.log('calling fillWithWord on ---->', word)
+    fillWithWord(word, number, direction) {      
       let cells = this.cellGrid.flat();
       let targetWord = this.getWordSpace(number, direction)
       let indexes = targetWord.letterIndexes;
@@ -970,7 +993,7 @@ export default {
         indexes.forEach((index, i) => { 
           cells[index].letter = newLetters[i]
         });
-        // targetWord.word = word;
+        targetWord.word = word;
       } else {
         // this.violatingCells.push(...indexes);
         // this.highlightedWords.splice(this.highlightedWords.indexOf(targetWord), 1);
@@ -1409,6 +1432,7 @@ export default {
     },
 
     async getClues(word) {
+      console.warn('GETTING CLUES FOR', word);      
       let clueArray = [];
       if (!this.fullWordList[word.length]) {
         console.log('need to get list of', word.length)
@@ -1419,45 +1443,70 @@ export default {
         if (entry.clue[0]) {
           entry.clue = entry.clue[0].toUpperCase() + entry.clue.substr(1, entry.clue.length);
           clueArray.push(entry.clue);
+        } else {
+          clueArray.push('|none|')
         }
       })
       console.log('clues for', word, ':', clueArray);
       
       return clueArray
     },
-
     async getWordList(length) {
       console.warn('CALLING DB FOR', length + '-LETTER WORDS');
       const response = await DB.getFullWordListOfLength(length);
       if (response.data) {
         const wordObjectList = response.data.split(' || ').filter(obj => obj).map(wordObj => wordObj = JSON.parse(wordObj));
-        wordObjectList.forEach(wordObj => {
+        wordObjectList.forEach((wordObj, i) => {
           if (wordObj.clues) {
             wordObj.clues = JSON.parse(wordObj.clues);
             wordObj.clues.forEach(clue => {
               if (clue) {
-                clue = clue.replace(/\|q\|/g, "'").replace(/\|qq\|/g, "\"");                  
+                clue = clue.replace(/\|q\|/g, "'").replace(/\|qq\|/g, "\"");            
               } else {
                 console.error('EMPTY CLUE for', wordObj.word)
               }
             });
+          } else {
+            wordObj.clues = [];
+            if (wordObj.clue) {
+              wordObj.clues.push(wordObj.clue);
+            }
           }
+          wordObj.word = wordObj.word.toUpperCase();
         })
-        this.fullWordList[length] = wordObjectList;
+        // this.fullWordList[length] = wordObjectList;
         console.warn('GOT', wordObjectList.length, length + '-letter words');
         return wordObjectList;
       } else {
         return ('COULD NOT GET WORD LIST OF LENGTH', length);
       }
     },
+    async getFullWordList() {
+      console.warn('getting full wrod list??')
+      let fullList = [];
+      for (let i = 3; i <= 23; i++) {
+        let wordList = this.fullWordList[i];
+        if (!wordList) {
+          let list = await this.getWordList(i);
+          requestAnimationFrame(() => {
+            fullList[i] = list;
+          })
+        }
+      }
+      this.fullWordList = fullList;
+    },
     async changeEditMode(e) {
+      const oldMode = this.$store.state.editMode;
       const newMode = e.target.id.split('-')[0];
+      console.warn('changing to', newMode)
       this.selectedCell = undefined;
-      this.highlightedWords = { across: [], down: [] };
+      this.highlightedWords.across.length = 0;
+      this.highlightedWords.down.length = 0;
       if (newMode === 'clues') {
-        let fullAcrossWords = this.wordsNeeded.across.filter(wordObj => !wordObj.word.includes('*'));
-        let fullDownWords = this.wordsNeeded.down.filter(wordObj => !wordObj.word.includes('*'));
-        fullAcrossWords.forEach(async wordObj => {        
+        console.log('need is', this.wordsNeeded)
+        let fullAcrossWords = this.wordsNeeded.across.filter(wordObj => !wordObj.word.includes('*') && !wordObj.clues.length);
+        let fullDownWords = this.wordsNeeded.down.filter(wordObj => !wordObj.word.includes('*') && !wordObj.clues.length);
+        fullAcrossWords.forEach(async wordObj => { 
           console.log('we getting clue for across', wordObj.word)
           let clueArr = await this.getClues(wordObj.word);
           this.wordsNeeded.across[this.wordsNeeded.across.indexOf(wordObj)].clues = clueArr;
@@ -1466,15 +1515,21 @@ export default {
           console.log('we getting clue for down', wordObj.word)
           let clueArr = await this.getClues(wordObj.word);
           this.wordsNeeded.down[this.wordsNeeded.down.indexOf(wordObj)].clues = clueArr;          
-        })
-        
+        })        
       }
-      console.warn('changing to', newMode)
+      if (newMode === 'dictionary') {
+        // if (!this.fullWordList[3]) {
+          // await this.getWordList(3);
+        // }
+          // this.getFullWordList();
+      }
+      if ((oldMode === 'diagram' || oldMode === 'puzzle') && (newMode === 'clues' || newMode === 'dictionary')) {
+        // hide control buttons right away
+        document.getElementById('control-area').style.opacity = 0;
+      }
       requestIdleCallback(() => {
         this.$store.commit('changeEditMode', newMode);
-        console.log('wordsNeeded now', this.wordsNeeded)
       })
-      // this.$store.commit('changeEditDirection', 'across');
     },
     changeDiagram(newDiagram) {
       this.showingModal = undefined;
@@ -1726,6 +1781,9 @@ export default {
         document.documentElement.style.setProperty('--cells-high', `${newValue}${optionData.cssUnit}`);
         console.error('board resized in', window.performance.now() - startTime);
         this.offensiveQuotient = 0;
+      }
+      if (optionName === 'dictionarySort') {
+        console.warn('WE GOT IN', optionName, newValue)
       }
     },
     adjustRangedOption(optionName, newValue) {
@@ -2029,10 +2087,10 @@ export default {
           let needed = this.getWordsNeeded(newGrid);
           let newWordCount = (needed.across.length + needed.down.length);
           let cheater = false;
-          console.log(newWordCount, 'new vs old', wordCount)
+          // console.log(newWordCount, 'new vs old', wordCount)
           if (newWordCount === wordCount) {
-            console.error('CELLDID NOT CHANGE WORD COUNT!', selectedCell);
-            cheater = true;
+            // console.error('CELLDID NOT CHANGE WORD COUNT!', selectedCell);
+            // cheater = true;
             // this.cellGrid[selectedCell.row][selectedCell.column].cheater = true;
             // unshade the test cells
             // newGrid[selectedCell.row][selectedCell.column].shaded = previousShaded;
@@ -2365,22 +2423,22 @@ export default {
       
       this.clearBoard(e, true);
     },
-    extractPuzzleFromImage(url, width, height) {
-      const crosswordImage = document.getElementById('crossword-image');
-      crosswordImage.crossOrigin = "Anonymous";
-      // crosswordImage.src = 'https://cors-anywhere.herokuapp.com/' + url;
-      crosswordImage.src = 'img/cw.jpg';
-      crosswordImage.style.width = `${width}px`;
-      crosswordImage.style.height = `${height}px`;
-      crosswordImage.addEventListener('load', () => {
-        console.log('LOADED!');
-        const extracted = diagramCreator.imageTo2Bit('crossword-image');
-        const newGrid = this.buildArrayFromGridString(extracted, width, height);
-        this.cellGrid = newGrid;
-        this.addCellLabels();
-        this.getWordsNeeded();
-      }, { once: true });
-    },
+    // extractPuzzleFromImage(url, width, height) {
+    //   const crosswordImage = document.getElementById('crossword-image');
+    //   crosswordImage.crossOrigin = "Anonymous";
+    //   // crosswordImage.src = 'https://cors-anywhere.herokuapp.com/' + url;
+    //   crosswordImage.src = 'img/cw.jpg';
+    //   crosswordImage.style.width = `${width}px`;
+    //   crosswordImage.style.height = `${height}px`;
+    //   crosswordImage.addEventListener('load', () => {
+    //     console.log('LOADED!');
+    //     const extracted = diagramCreator.imageTo2Bit('crossword-image');
+    //     const newGrid = this.buildArrayFromGridString(extracted, width, height);
+    //     this.cellGrid = newGrid;
+    //     this.addCellLabels();
+    //     this.getWordsNeeded();
+    //   }, { once: true });
+    // },
     getRandomBinaryPattern(percentBlack) {
       const binaryArray = new Array(225);
       const toBeShaded = [];
@@ -3220,6 +3278,7 @@ export default {
       for (var c=0;c<word.length;c++) {
           var char = word[c]
           score += scrabbleScores[char]
+          score += scrabbleScores[char]
       }
       return score
     },
@@ -3352,7 +3411,6 @@ export default {
 
 <style scoped>
 #micro-board-image {
-  /* display: none; */
   position: fixed;
   top: 0;
   left: 0;
@@ -3377,8 +3435,6 @@ export default {
   top: 0;
   left: 50%;
   transform: translate(-50%, 0);
-  /* width: 100px;
-  height: 100px; */
   font-size: 1.5rem;
   font-weight: 700;
   padding: 2vh;
@@ -3399,15 +3455,17 @@ export default {
     1fr
   ;
   /* overflow-y: auto; */
-  align-items: flex-end;
-  transition: opacity 600ms ease;
+  /* align-items: flex-end; */
+  transition: opacity 300ms ease;
+  background: var(--body-bg-color);
 }
-.home.clues-mode {
+.home.clues, .home.dictionary {
   grid-template-rows:
     var(--header-height)
     1fr
     auto
   ;
+  background: #222;
 }
 .home:not(.ready) {
   opacity: 0;
@@ -3439,8 +3497,9 @@ export default {
 	flex-direction: column;
   align-items: center;
 	justify-content: center;
+  transition: opacity 210ms ease;
 }
-.home.clues-mode .board-area {
+.home.clues .board-area, .home.dictionary .board-area {
   overflow: auto;
   justify-content: flex-start;
 }
@@ -3452,7 +3511,6 @@ export default {
   border-top: calc(var(--header-height) / 4) solid var(--secondary-text-color);
 }
 .clue-display {
-  /* color: var(--secondary-text-color); */
   color: white;
   font-weight: bold;
   width: 100%;
@@ -3461,28 +3519,20 @@ export default {
   position: relative;
   background-color: #222;
 }
-.expand-button {
-  font-weight: bold;
-  color: var(--main-text-color);
-  height: var(--header-height);
-  border: 1px solid var(--secondary-text-color);
-  padding: calc(var(--main-padding) / 2);
-  background-color: unset;
-  border-radius: calc(var(--main-padding) / 4);
-  display: flex;
-  align-items: center;
-  justify-content: space-evenly;
-  font-size: 0.75rem;
-  background-color: var(--button-color)
+.showing {
+  opacity: 1;
 }
-.expand-button > .down-caret {
-  margin-left: 5%;
+.clue-display .expand-button {
+  height: var(--header-height);
+  padding: 0 calc(var(--main-padding) / 2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 .clue-display h1 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
 }
 .clue-display h1:nth-of-type(2) {
-  font-size: 1.5rem;
   margin-top: var(--header-height);
 }
 .clue-display > header {
@@ -3536,21 +3586,54 @@ export default {
 .word-clue-entry:last-child {
   border-bottom: 0;
 }
-.word-clue-entry > button:active {
-  background-color: #333;
-}
-.word-clue-entry > button {
+.expand-button {
   grid-row-start: 1;
   grid-row-end: span 2;
   grid-column-start: 3;
   display: flex;
   justify-content: space-between
 }
+.expand-button:active {
+  background-color: #333;
+}
 .clue-display h1.direction-label {
   font-size: 1.75rem;
   padding: calc(var(--main-padding) / 2) var(--main-padding);
 }
-@media (orientation: landscape) {
+.section-fade-enter-active {
+  transition: opacity 210ms ease;
+}
+.section-fade-leave-active {
+  transition: none;
+}
+.section-fade-enter/* .fade-leave-active below version 2.1.8 */ {
+  opacity: 0;
+}
+.section-fade-leave-to  {
+  opacity: 0;
+}
+@media screen and (orientation: landscape) {
+  .home {
+    min-height: var(--view-height);
+    max-height: var(--view-height);
+    min-width: 100vw;
+    display: grid;
+    grid-template-rows:
+      var(--header-height)
+      1fr
+    ;
+    grid-template-columns: 100vh 1fr;
+    transition: opacity 300ms ease;
+    background: var(--body-bg-color);
+  }
+  .home.clues, .home.dictionary {
+    grid-template-rows:
+      var(--header-height)
+      1fr
+      auto
+    ;
+    background: #222;
+  }
 	.board-area {
 		grid-column-start: 1;
 	}

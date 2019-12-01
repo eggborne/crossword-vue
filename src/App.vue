@@ -39,7 +39,7 @@ export default {
       window.CLICK_METHOD = { down: 'onTouchStart', up: 'onTouchEnd' };
     } else {
       window.CLICK_METHOD = { down: 'onMousedown', up: 'onMouseUp' };
-    }
+    }    
   }
 };
 </script>
@@ -57,7 +57,7 @@ export default {
   --blank-color: #060606;
   --cell-color: white;
   --cell-text-color: var(--blank-color);
-  --pane-highlight-color: rgba(255, 166, 0, 0.326);
+  --pane-highlight-color: rgba(0, 0, 0, 0.219);
   --button-color: rgb(48, 60, 126);
   --button-on-color: blue;
   --button-selected-color: rgb(35, 167, 33);
@@ -78,7 +78,7 @@ export default {
   --lower-area-height: calc(var(--view-height) - var(--header-height) - 100vmin);
 }
 html {
-  font-size: calc(1rem);
+  font-size: 1rem;
   font-family: var(--main-font);
   overflow: hidden;
 }
@@ -163,7 +163,7 @@ input::-moz-range-thumb {
 }
 #app {
 	color: var(--text-color);
-  background: var(--body-bg-color);
+  /* background: var(--body-bg-color); */
   min-height: var(--view-height);
   width: 100vw;
   display: grid;
@@ -202,6 +202,27 @@ input::-moz-range-thumb {
   }
   100% {
     background: rgba(174, 182, 9, 0.479);
+  }
+}
+.panel-slide-enter-active {
+  transition: transform 210ms ease;
+}
+.panel-slide-leave-active {
+  transition: transform 210ms ease;
+}
+.panel-slide-enter/* .fade-leave-active below version 2.1.8 */ {
+  transform: scale(0.8)
+}
+.panel-slide-leave-to  {
+  transform: scale(0.8);
+}
+[v-cloak] {
+  /* display: none !important; */
+}
+
+@media screen and (orientation: landscape) {
+  :root {
+    --board-size: calc(100vh - var(--header-height) - var(--main-padding) * 3.5);
   }
 }
 </style>

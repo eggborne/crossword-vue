@@ -1,17 +1,17 @@
 <template>
 <div class='button-menu'>
   <Button :label='`${label} ${displayValue}`' :handleClick='toggleOpen' :highlighted='isOpen' />
-  <div class='button-menu-options' :class='[isOpen && `open`, option.name && `two-column`]'>
+  <div class='button-menu-options' :class='[
+    isOpen && `open`, option.name === `dictionarySort` ? `full-width` : `two-column`
+  ]'>
 	  <Button 
       v-for='(selection, i) in selections'
-      v-bind:key='i'      
+      v-bind:key='i'
       :label="selection.labelText" 
-      :handleClick="() => { toggleOpen(); handler(option.name, selection.valueAmount);}"
-      :class='[currentValue === selection.valueAmount && `selected`, selection.labelText.toUpperCase() === `OFF` && `wide`]'
+      :handleClick="() => { toggleOpen(); handler(option.name, selection.valueAmount); }"
+      :class='[currentValue === selection.valueAmount && `selected`, (selection.labelText.toUpperCase() === `OFF` || selection.labelText.toUpperCase() === `ALL`) && `wide`]'
     />
-
-
-  </div>
+  </div>  
 </div>
 </template>
 
@@ -37,7 +37,7 @@ export default {
     option: Object,
     label: String,
     selections: Array,
-    currentValue: Number,
+    currentValue: [String, Number],
     handler: Function
   },
   components: {
@@ -45,7 +45,16 @@ export default {
   },
   computed: {
     displayValue() {
-      return this.displayValues[this.currentValue]
+      if (this.option.name === 'dictionarySort') {
+        let label = this.$store.state.dictionaryOptions.sortTypes[this.currentValue].labelText;
+        return label;
+      } else if (this.option.name === 'dictionaryFilter') {
+        let label = this.$store.state.dictionaryOptions.filterTypes[this.currentValue].labelText;
+        return label;
+      } else if (this.option.name === 'dictionaryView') {
+        return this.$store.state.dictionaryOptions.viewLetter;
+      }
+      return this.displayValues[this.currentValue];
     }
   },
   methods: {
@@ -87,6 +96,17 @@ export default {
   grid-template-columns: 1fr 1fr;
   grid-auto-flow: row;
 }
+.button-menu-options.width-100 {
+  position: fixed;
+  left: 0;
+  bottom: calc(var(--header-height) * 2 + var(--main-padding) * 2);
+  width: 100vmin;
+  display: flex;
+  flex-wrap: wrap;
+}
+.button-menu-options.full-width button {
+  width: 100%;
+}
 .button-menu-options:not(.open) {
   opacity: 0;
   transform: scaleY(0);
@@ -94,6 +114,13 @@ export default {
 }
 .button-menu-options > button {
   padding: calc(var(--main-padding) / 1.5);
+}
+.button-menu-options.width-100 > button {
+  width: calc(var(--header-height) / 1.25);
+}
+.button-menu-options.width-100 > button.wide {
+  /* grid-column-end: span 6; */
+  flex-grow: 1;
 }
 .button-menu-options > button.wide {
   grid-column-end: span 2;

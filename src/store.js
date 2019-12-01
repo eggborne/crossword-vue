@@ -42,6 +42,21 @@ export default new Vuex.Store({
         contiguous: true
       }
     },
+    dictionaryOptions: {
+      sortBy: 0,
+      filterBy: 0,
+      sortTypes: [
+        { labelText: `A-Z`, valueAmount: 0 },
+        { labelText: `Scrabble`, valueAmount: 1 },
+        { labelText: `Clued`, valueAmount: 2 },
+      ],
+      filterTypes: [
+        { labelText: `First Letter`, valueAmount: 0 },
+        { labelText: `Length`, valueAmount: 1 },
+      ],
+      viewLetter: undefined,
+      viewLength: '3'
+    },
     menuOpen: false,
     logOpen: false,
     keyboardOpen: false,
@@ -105,13 +120,28 @@ export default new Vuex.Store({
     },
     setToastVisible(state, newVisibleState) {
       state.toastVisible = newVisibleState;
+    },
+    setDictionarySort(state, newSort) {
+      state.dictionaryOptions.sortBy = newSort;
+    },
+    setDictionaryViewLetter(state, newViewLetter) {
+      state.dictionaryOptions.viewLetter = newViewLetter;
+    },
+    setDictionaryFilter(state, newFilter) {
+      state.dictionaryOptions.filterBy = newFilter;
+    },
+    setDictionaryViewLength(state, newViewLength) {
+      state.dictionaryOptions.viewLength = newViewLength;
+    },
+    setDictionaryViewLetter(state, newViewLetter) {
+      state.dictionaryOptions.viewLetter = newViewLetter;
     }
   },
   actions: {
     // adjustRule(context, payload) {
 
     // },
-    loadSavedUIOptions(context, payload) { 
+    loadSavedUIOptions(context, payload) {
       Object.keys(payload).forEach((attr) => {
         const attrPayload = {
           attr,

@@ -86,7 +86,6 @@ export default {
 			}
 			return indexLists;
 		},		
-		
 		viableLetters() {
 			let indexList = [];
 			if (this.selectedCell) {
@@ -200,11 +199,9 @@ export default {
 	opacity: 0.5;
 }
 @media (orientation: landscape) {
-	@media (orientation: landscape) {
-		.board {
-			max-width: 60vw;
-			max-height: 60vw;
-		}
+	.board {
+		max-width: 60vw;
+		max-height: 60vw;
 	}
 }
 </style>

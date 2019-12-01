@@ -1,5 +1,6 @@
-<template>
-	<div class="control-panel" :class='[busy && `busy`, $store.state.editMode === `clues` && `minimal`]'>
+<template>        
+	<div class="control-panel" :class='[busy && `busy`, $store.state.editMode]'>
+		
 		<div v-if='$store.state.editMode === `diagram`' class='info-bar'>
 			<div v-if='busy' class='spinner-area'>
 				<Spinner :direction='-1'/>
@@ -55,21 +56,9 @@
 			<div>Words: <span :style='{fontWeight: `bold`}'>{{ `${wordsNeeded.across.length}/${wordsNeeded.down.length} (${wordsNeeded.across.length + wordsNeeded.down.length})` }}</span></div>
 			<div>Long/Short: <span :style='{fontWeight: `bold`}'>{{ longestWordLengths[0] }} / {{ shortestWordLength }}</span></div>
 			<div>Filled: <span :style='{fontWeight: `bold`}'>{{ filledPercent }}%</span></div>
-			<!-- <div>
-				Theme words:
-				<span v-if='themeWords.across[0]'>
-					A: {{ themeWords.across.length }} x {{ themeWords.across[0].word.length }}
-				</span>
-				<span v-else-if='themeWords.down[0]'>
-					D: {{ themeWords.down.length }} x {{ themeWords.down[0] && themeWords.down[0].word.length }}
-				</span>
-				<span v-else>
-					None
-				</span>			
-			</div> -->
 			<div></div>
 		</div>
-		<div v-if='$store.state.editMode===`diagram`' class='control-area'>
+		<div v-if='$store.state.editMode===`diagram`' class='control-area' id='control-area'>
 			<Button :label="`Clear all`" :handleClick="clearBoard" />
 			<Button :label="`Shade all`" :handleClick="shadeBoard" />
 			<!-- <Button :label="`Checked`" :handleClick="() => $store.state.puzzleOptions.rules.allChecked = !$store.state.puzzleOptions.rules.allChecked" :highlighted='rules.allChecked' /> -->
@@ -96,7 +85,8 @@
 				<!-- <Button :label="`Rules...`" :handleClick="handleClickRules" /> -->
 			</div>
 		</div>
-		<div v-else-if='$store.state.editMode===`puzzle`  && !$store.state.enteringLetters' class='control-area'>
+
+		<div v-else-if='$store.state.editMode===`puzzle`  && !$store.state.enteringLetters' class='control-area' id='control-area'>
 			<Button :label="`Clear all`" :handleClick="clearLetters" />
 			<Button 
 				:class='[(!selectedCell || !selectedCell.number || $store.state.enteringLetters) && `disabled`]' 
@@ -104,6 +94,7 @@
 				:handleClick="findWord" 
 			/>
 			<Button 
+				id='edit-letter-button'
 				:class='[!selectedCell && `disabled`, $store.state.enteringLetters && `highlighted`]' 
 				:label="`Edit Letter`"
 				:handleClick="() => { $store.commit('changeEnteringLetters', !$store.state.enteringLetters); $store.commit('toggleKeyboard') }" 
@@ -122,15 +113,35 @@
 			</div>
 			<Button :class='[!selectedCell && `disabled`]' :label="`Word choices`" :handleClick="handleClickToViewChoices" />
 		</div>
-		<div v-else-if='$store.state.editMode===`clues`' class='control-area'>
-			<Button :label="`Save new word`" :handleClick="handleClickToSaveWord" />
+		<div v-if='$store.state.editMode===`clues`' class='control-area' id='control-area'>
+			<!-- <Button :label="`Save new word`" :handleClick="handleClickToSaveWord" /> -->
+			<div class='filled-message'>{{ `${this.completeWords} / ${(this.wordsNeeded.across.length + this.wordsNeeded.down.length)} words filled` }}</div>
 		</div>
+		<div v-else-if='$store.state.editMode===`dictionary`' class='control-area' id='control-area'>
+			<ButtonMenu 
+				:selections='$store.state.dictionaryOptions.sortTypes'
+				:option='options.dictionarySort'
+				:label='options.dictionarySort.title'
+				:currentValue='$store.state.dictionaryOptions.sortBy'
+				:handler='changeDictionarySort'
+			/>
+			<ButtonMenu 
+				:selections='filterTypes'
+				:option='options.dictionaryFilter'
+				:label='options.dictionaryFilter.title'
+				:currentValue='$store.state.dictionaryOptions.filterBy'
+				:handler='changeDictionaryFilter'
+			/>
+			<Button :label="`Add new word`" :handleClick="handleClickToSaveWord" />
+		</div>
+	
 		<div v-if='!$store.state.keyboardOpen' class='lower-area'>
 			<ModeBar
 				:changeEditMode='changeEditMode'
 			/>
 		</div>
 		<Keyboard 
+			v-show='$store.state.editMode === `puzzle`'
 			:class='[$store.state.keyboardOpen ? `` : `closed`]'
 			:handleClickKey='handleClickKey'
 		/>
@@ -163,7 +174,11 @@ export default {
       { labelText: 'Off', valueAmount: 0 },
       { labelText: '2x', valueAmount: 1 },
       { labelText: '4x', valueAmount: 2 },
-		],		
+		],
+		filterTypes: [
+      { labelText: 'First Letter', valueAmount: 0 },
+      { labelText: 'Length', valueAmount: 1 },
+    ],
   }),
   props: {
 		selectedCell: Object,
@@ -214,6 +229,21 @@ export default {
     Keyboard
 	},
   computed: {
+		viewOptions() {
+			let options = [];
+			'abcdefghijklmnopqrstuvwxyz'.split('').forEach(letter => {
+				options.push({
+					labelText: letter,
+					valueAmount: letter
+				})
+			});
+			options.push({
+				labelText: 'ALL',
+				valueAmount: 'ALL'
+			});
+			console.log('made viewOptions', options)
+			return options;
+		},
 		rules() {
 			return this.$store.state.puzzleOptions.rules;
 		},
@@ -281,6 +311,20 @@ export default {
 			return checkedClass;
 		}
 	},
+	methods: {
+		changeDictionarySort(optionName, newValue) {
+			console.log('got suckas', optionName, newValue)
+			this.$store.commit('setDictionarySort', newValue)
+		},
+		changeDictionaryFilter(optionName, newValue) {
+			console.log('got suckas', optionName, newValue)
+			this.$store.commit('setDictionaryFilter', newValue)
+		},
+		changeDictionaryViewLength(optionName, newValue) {
+			console.log('got suckas', optionName, newValue)
+			this.$store.commit('setDictionaryViewLetter', newValue)
+		}
+	}
 };
 </script>
 
@@ -290,21 +334,25 @@ export default {
 	font-size: calc(var(--header-height) / 3.5);
 	max-width: 100%;
 	height: 100%;
+	max-height: calc(var(--view-height) - var(--header-height) - 100vw);
 	flex-basis: var(--control-panel-min-height);
 	background: var(--theme-color);
 	display: flex;
 	flex-direction: column;
 	justify-content: space-between;
 }
-.control-panel.minimal {
-	height: min-content;	
+.clues > .control-area, .dictionary > .control-area {
+	padding: var(--main-padding);
+	grid-template-rows: 1fr;
 }
-.control-panel.minimal > .control-area {
+.dictionary > .control-area button {
 	padding: var(--main-padding);
 }
-.control-panel.minimal > .control-area button {
+.dictionary > .control-area div:nth-child(2) {
+	grid-column-end: span 2;
+}
+.dictionary > .control-area button:last-child {
 	grid-column-start: 4;
-	padding: var(--main-padding);
 }
 .untrue {
 	text-decoration: line-through;
@@ -408,13 +456,13 @@ export default {
 .generate-area > button {	
 	/* align-self: center; */
 }
-.generate-area > button:first-of-type {
-	border-right-color: #ffffff55;
-	background-color: rgb(88, 123, 27);
-}
 .generate-area > button:last-of-type {
 	border-left-color: #ffffff55;
 	background-color: rgb(126, 103, 71);
+}
+.generate-area > button:first-of-type {
+	border-right-color: #ffffff55;
+	background-color: rgb(88, 123, 27);
 }
 .info-bar {
 	grid-column-start: 1;
@@ -445,18 +493,47 @@ export default {
 	/* margin-top: var(--main-padding); */
 	justify-self: flex-end;
 }
+.filled-message {
+	grid-column-end: span 4;
+	font-size: 1rem;
+	font-weight: bold;
+	width: 100%;
+	text-align: center;
+}
 #lower-area button {
 	font-size: 1rem;
 	padding: var(--main-padding);
 	height: calc(var(--header-height) * 1.5);
 }
-@media (orientation: landscape) {
+@media screen and (orientation: landscape) {
+	#edit-letter-button {
+		opacity: 0;
+		pointer-events: none;
+	}
 	.control-panel {
 		width: 100%;
 		height: 100%;
-		grid-template-columns: 0.5fr 0.5fr;
+		min-height: 100%;
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-end;
 		grid-column-start: 2;
 		justify-self: end;
+	}
+	.control-panel.dictionary .control-area {
+		align-items: end;
+	}
+	.control-area {
+		padding: 1% var(--main-padding);
+		/* height: calc(var(--header-height) * 2.75); */
+		max-width: 100%;
+		max-height: calc(var(--header-height) * 2.75);
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		grid-auto-rows: 1fr;
+		grid-column-gap: calc(var(--main-padding) / 3);
+		flex-grow: 1;
+		align-items: center;
 	}
 }
 </style>

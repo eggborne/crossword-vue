@@ -34,6 +34,7 @@ button {
 	align-items: center;
 	text-shadow: -1px -1px 0 #00000088, 1px -1px 0 #00000088, -1px 1px 0 #00000088,
 		2px 1px 0 #00000088;
+  white-space: no-wrap;
 }
 button.highlighted {
   background-color: var(--button-on-color);

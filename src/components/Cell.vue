@@ -61,6 +61,8 @@ export default {
   width: var(--cell-width);
   height: var(--cell-height);
   max-height: var(--cell-height);
+  /* max-width: calc(60vw / var(--cells-wide));
+  max-height: calc(60vw / var(--cells-wide)); */
   padding: 0;
   z-index: 1;
   text-transform: uppercase;  

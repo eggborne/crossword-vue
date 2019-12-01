@@ -52,27 +52,28 @@
     </div>
 	</div>
 
-  <div v-else-if='type === `word`' class="save-modal">    
-    <header>Enter word:</header>
-    <input
+  <div v-else-if='type === `word` || type === `clues`' :class='`${type} save-modal`'>    
+    <header v-if='type === `word`'>Enter word:</header>
+    <input v-if='type === `word`'
       :class='[`word-input`, userWordInDB && `word-exists`]'
       type='text'
       placeholder=''
       v-model='inputValue'
       @input='handleTypedNewWord'
     />
-    <div :class='[`status-area`, userWordInDB && `showing`]'>
+    <div v-if='type === `word`' :class='[`status-area`, userWordInDB && `showing`]'>
       {{ statusMessage }}
     </div>
+    <header v-if='type === `clues`'>{{ wordObj.word.toUpperCase() }}</header>
     <div :class='[`clue-list`, `user-word-info`]'>
       <CluePanel 
         :class='[true && `showing`, (userWordInDB && userWord.selectedClue === i) && `selected`]' 
-        v-for='(clue, i) in userWordClues' 
+        v-for='(clue, i) in clueList' 
         :key='clue'
         :doomed='doomedClue === clue'
         :selectClue='() => handleSelectClue(i)'
       >
-        {{ clue }}
+        {{ clue !== `|none|` && clue }}
         <Button 
           :clickType='`click`'
           :handleClick='() => handleClickDeleteClue(userWord, i)' 
@@ -100,6 +101,7 @@
     </div>
     <div class='save-button-area'>
       <Button
+      v-if='type === `word`'
         id='cancel-button'
         :label="`Cancel`" :handleClick="handleClickCancelSave"
       />
@@ -110,10 +112,10 @@
         :handleClick="userWordInDB ? handleClickCancelSave : () => handleSaveWord(inputValue)"
       />
     </div>
-    <div class='pattern-label' v-if='problemPatterns.length'>
+    <div class='pattern-label' v-if='type === `word` && problemPatterns.length'>
       Recent unmatched patterns:
     </div>
-    <div class='patterns-area' v-if='problemPatterns.length'>
+    <div class='patterns-area' v-if='type === `word` && problemPatterns.length'>
       <div 
         v-for='(pat, i) in problemPatterns.filter(pat => pat).sort((a, b) => b.quantity - a.quantity).sort((a, b) => a.pattern.length - b.pattern.length)' 
         :key='i'
@@ -121,35 +123,6 @@
       >
       {{ pat.pattern.replace(/\*/g, "_") }} ({{ pat.quantity }}) 
       </div>
-    </div>
-  </div>
-
-  <div v-else-if='type === `clues`' class="clues save-modal">
-    <header>
-    {{ wordObj.word.toUpperCase() }}
-    </header>
-    <div class='clue-list'>
-      <div class='clue' v-for='(clue, i) in wordObj.clues' :key='i'>
-        {{ clue }}
-        <Button :handleClick='() => handleDeleteClue(userWord, i)' :label='`DELETE`' class='delete-clue-button'></Button>
-      </div>
-      <span :style='{height: `var(--header-height)`, fontWeight: `normal`, textAlign: `center`}' v-if='!wordObj.clues.length'>no clues in database</span>
-      <div :class='[`clue editable`, clueEdited && `edited`]'>
-        <div contenteditable @input='handleClueInputChange' id='clue-edit-space'></div>
-        <Button contenteditable='false'
-          class='save-clue-button'
-          :label='`Save`' :handleClick="() => handleSaveClue(userWord, inputValue)"
-        />
-      </div>     
-    </div>
-    <div class='status-area'>
-      <slot></slot>
-    </div>
-    <div class='save-button-area'>
-      <Button
-        class='save-button'
-        :label="`Done`" :handleClick="handleClickCancelSave"
-      />      
     </div>
   </div>
   <!-- <Spinner :direction='-1' />
@@ -192,9 +165,24 @@ export default {
     Spinner,
     CluePanel
   },
+  mounted() {
+    if (this.type === 'word') {
+      
+    }
+    if (this.type === 'clues') {
+      this.userWord = this.wordObj;
+      this.inputValue = this.wordObj.word;
+      this.userWordInDB = true;
+    }
+  },
   computed: {
-    userWordClues() {
-      return this.userWord ? this.userWord.clues : [];
+    clueList() {
+      if (this.type === 'word' && this.userWord) {
+        return this.userWord.clues;
+      }
+      if (this.type === 'clues') {
+        return this.wordObj.clues
+      }
     }
   },
   methods: {
@@ -297,11 +285,12 @@ export default {
     },
     async handleClickDeleteClue(wordObj, clueIndex) {
         this.doomedClue = wordObj.clues[clueIndex];
-        // await this.wait(300);
+        await this.wait(1);
         await this.handleDeleteClue(wordObj, clueIndex);
-        await this.lookUpWord(this.userWord.word);
-        this.handleTypedNewWord();
+        // await this.lookUpWord(this.userWord.word);
+        // this.handleTypedNewWord();
         requestAnimationFrame(() => {
+          wordObj.clues.splice(clueIndex, 1)
           this.doomedClue = undefined;
         });
     }
@@ -318,7 +307,7 @@ export default {
   background: #333333;
 	color: var(--blank-color);
 	width: 95%;
-  padding: calc(var(--main-padding) * 1.5) calc(var(--main-padding) * 3);
+  padding: calc(var(--main-padding) * 1.5) calc(var(--main-padding) * 2.5);
   transform: translate(-50%, 0);
   display: grid;
   justify-items: center;
@@ -343,7 +332,6 @@ export default {
 .clues.save-modal {
   grid-template-rows: unset;
   grid-template-rows:
-    var(--header-height)
     var(--header-height)
     1fr
     calc(var(--header-height) * 1.5)
@@ -373,19 +361,22 @@ header {
   display: flex;
   flex-direction: column;
   padding: calc(var(--main-padding)) 0; 
-  margin-top: calc(var(--main-padding) * 3);
+  margin-top: calc(var(--main-padding) * 1.5);
   box-sizing: content-box;
-  overflow-x: visible;
+  overflow-x: hidden;
   overflow-y: auto;
-
+}
+.clues .clue-list {
+  margin: 0;
 }
 .clue-edit-placeholder {
   position: absolute;
   opacity: 0.5;
   display: flex;
+  width: 65%;
   pointer-events: none; 
   transition: opacity 210ms ease;
-  /* z-index: -1; */
+  flex-wrap: wrap;
 }
 .clue-edit-placeholder.showing {
   opacity: 0.5;
@@ -396,7 +387,7 @@ header {
   text-align: left;
   border-radius: calc(var(--main-padding) / 6);
   background: #00000066;
-  padding: var(--main-padding);  
+  padding: var(--main-padding);
 }
 
 .status-area {
@@ -452,10 +443,14 @@ header {
   box-sizing: content-box;
 }
 .save-button {
-  flex-grow: 1;
+  flex-grow: 0.8;
   margin-left: calc(var(--main-padding) * 2);
   font-size: 1.25rem;
   height: 100%;
+}
+.clues .save-button {
+  margin: 0;
+  flex-grow: 0.5;
 }
 #cancel-button {
   font-size: 1rem;

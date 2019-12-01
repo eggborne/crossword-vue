@@ -28,7 +28,9 @@ export default {
   border-radius: calc(var(--main-padding) / 4);
   transform: translateX(-50%) translateY(calc(-100% - (var(--header-height) / 5)));
   left: 50%;
-  width: 50vmin;
+  /* width: 50vmin; */
+  width: max-content;
+  padding: 0 var(--main-padding);
   height: var(--header-height);
   background: #000000;
   color: white;

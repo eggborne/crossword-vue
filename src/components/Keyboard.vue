@@ -149,4 +149,10 @@ export default {
 .log-item.success {
   color: #aaffaa;
 }
+
+@media screen and (orientation: landscape) {
+  .keyboard {
+    display: none;
+  }
+}
 </style>

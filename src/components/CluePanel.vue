@@ -36,7 +36,8 @@ export default {
   grid-template-columns: 1fr auto;
   grid-template-rows: auto auto;
   margin: calc(var(--main-padding) / 2);  
-  min-height: min-content;
+  /* height: calc(var(--header-height) * 1.5); */
+  min-height: calc(var(--header-height) * 1.65);
   box-shadow: 0px 1px calc(var(--main-padding) / 8) #000000cc,
 		0px 0px calc(var(--main-padding) / 8) #000000cc;
   /* opacity: 0; */
@@ -52,6 +53,7 @@ export default {
   display: flex;
   justify-content: space-between;
   background-color: #12222166;
+  height: calc(var(--header-height) * 1.65);
 }
 .clue.editable.invisible {
   transform: none;
@@ -60,6 +62,7 @@ export default {
   flex-grow: 1;
   outline: none;
   word-wrap: break-word;
+  width: 65%;
 }
 .clue.edited .clue-edit-placeholder, #clue-edit-space:focus > .clue-edit-placeholder {
   display: none;
